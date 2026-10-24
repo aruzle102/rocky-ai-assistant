@@ -75,3 +75,13 @@ size, and the CI `aapt` package line → copy APK to
 - Microphone permission on the device (runtime prompt + recovery message).
 - Device speech services for recognition/TTS quality (vendor-dependent).
 - The workflow-scope authorisation above (for the cloud build only).
+
+## SUCCESS — APK BUILT AND VERIFIED (2026-10-24 ~22:47 CET)
+
+- **Successful run:** https://github.com/aruzle102/rocky-ai-assistant/actions/runs/40135599489 (commit d8d7195, 1m35s, all steps passed)
+- **Previous failed run:** 40135504508 failed at "Set up Android SDK" — android-actions/setup-android@v3 tries the obsolete `tools` package (sdkmanager exit 1). Fixed in d8d7195 by using the runner's preinstalled Android SDK and setup-java@v5.
+- **Artifact:** ROCKY_AI-debug-apk / app-debug.apk, 4,107,211 bytes (4.0 MB), downloaded and verified locally.
+- **Zip integrity:** Python zip test clean (bad_file: None), 483 entries, classes.dex files + assets/capacitor.config.json present.
+- **aapt (from CI log):** package: name='com.modaliadz.rocky' versionCode='1' versionName='1.0' compileSdkVersion='34'; application-label:'ROCKY AI'.
+- **Install:** on Android, allow install from this source if prompted, open ROCKY AI, grant Microphone when asked. This is a debug APK (signed with the debug key), not a Play Store release.
+- **Still NOT tested on a device (no emulator/phone here):** app launch, hologram rendering on device, mic permission flow, speech recognition ar-DZ/fr-FR/en-US, TTS voice quality, icon appearance on a home screen. Test these on the user's phone and report back.
