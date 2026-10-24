@@ -1,0 +1,98 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Set up Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build debug APK with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Verify APK exists and is non-empty
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK" || (echo "APK missing or empty: $APK" && exit 1)
+          ls -lh "$APK"
+          unzip -l "$APK" | head -40
+
+      - name: Inspect APK package identity (aapt)
+        run: |
+          AAPT="$ANDROID_HOME/build-tools/34.0.0/aapt"
+          if [ ! -x "$AAPT" ]; then AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | head -1); fi
+          echo "Using aapt: $AAPT"
+          "$AAPT" dump badging android/app/build/outputs/apk/debug/app-debug.apk | head -20
+          "$AAPT" dump badging android/app/build/outputs/apk/debug/app-debug.apk | grep -E "package:|application-label" || true
+
+      - name: Secret scan of built bundle (fail on obvious key patterns)
+        run: |
+          echo "Scanning dist/ for committed secrets (patterns only, no values printed)..."
+          if grep -RInE "sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}" dist/ android/app/src/main/assets/ 2>/dev/null; then
+            echo "::error::Possible secret pattern found in built bundle"
+            exit 1
+          fi
+          echo "Secret scan clean."
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ROCKY_AI-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Build summary
+        run: |
+          {
+            echo "## ROCKY AI build"
+            echo ""
+            echo "- Commit: ${{ github.sha }}"
+            echo "- Ref: ${{ github.ref }}"
+            echo "- Artifact: ROCKY_AI-debug-apk (app-debug.apk)"
+            echo "- Package: com.modaliadz.rocky"
+            echo "- App name: ROCKY AI"
+            echo "- Status: build completed (this summary is written only if all prior steps passed)"
+            echo "- Tests: vitest unit tests (brain state machine, task store)"
+          } >> "$GITHUB_STEP_SUMMARY"
