@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rocky_bg">#050914</color>
+    <color name="rocky_dark">#081226</color>
+    <color name="rocky_panel">#0E1A2E</color>
+    <color name="rocky_blue">#2F7BFF</color>
+    <color name="rocky_cyan">#22D3EE</color>
+    <color name="rocky_text">#E6F1FF</color>
+    <color name="rocky_dim">#8FA8C8</color>
+    <color name="rocky_line">#1E3A5F</color>
+    <color name="rocky_error">#FF3B5C</color>
+    <color name="rocky_ok">#34D399</color>
+    <color name="rocky_warn">#FBBF24</color>
+</resources>

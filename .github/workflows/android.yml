@@ -15,12 +15,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
       - name: Set up Java 17 (Temurin)
         uses: actions/setup-java@v5
         with:
@@ -28,7 +22,7 @@ jobs:
           java-version: '17'
 
       # ubuntu-latest runners already ship the Android SDK at $ANDROID_HOME.
-      # android-actions/setup-android@v3 was removed: it fails on current
+      # android-actions/setup-android@v3 is NOT used: it fails on current
       # runners because it tries to install the obsolete 'tools' package
       # ("Warning: Failed to find package 'tools'", sdkmanager exit 1).
       - name: Check preinstalled Android SDK
@@ -37,25 +31,15 @@ jobs:
           ls "$ANDROID_HOME/build-tools" || true
           ls "$ANDROID_HOME/platforms" || true
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npm run typecheck
-
-      - name: Unit tests
-        run: npm test
-
-      - name: Build web bundle
-        run: npm run build
-
-      - name: Sync Capacitor Android project
-        run: npx cap sync android
+      - name: Unit tests (JUnit, pure Kotlin)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build debug APK with Gradle
         run: |
           cd android
-          chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
       - name: Verify APK exists and is non-empty
@@ -63,7 +47,7 @@ jobs:
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK" || (echo "APK missing or empty: $APK" && exit 1)
           ls -lh "$APK"
-          unzip -l "$APK" | head -40
+          unzip -l "$APK" | head -60
 
       - name: Inspect APK package identity (aapt)
         run: |
@@ -73,11 +57,22 @@ jobs:
           "$AAPT" dump badging android/app/build/outputs/apk/debug/app-debug.apk | head -20
           "$AAPT" dump badging android/app/build/outputs/apk/debug/app-debug.apk | grep -E "package:|application-label" || true
 
-      - name: Secret scan of built bundle (fail on obvious key patterns)
+      - name: Check native classes, no Capacitor web bundle as the app
         run: |
-          echo "Scanning dist/ for committed secrets (patterns only, no values printed)..."
-          if grep -RInE "sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}" dist/ android/app/src/main/assets/ 2>/dev/null; then
-            echo "::error::Possible secret pattern found in built bundle"
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          echo "Checking for native Kotlin classes (dex)..."
+          unzip -l "$APK" | grep -E "classes.*\.dex" || (echo "No dex found" && exit 1)
+          if unzip -l "$APK" | grep -q "assets/public/index.html"; then
+            echo "::error::Capacitor web bundle still present in APK"
+            exit 1
+          fi
+          echo "Native check passed: dex present, no Capacitor web bundle."
+
+      - name: Secret scan of sources (fail on obvious key patterns)
+        run: |
+          echo "Scanning Kotlin sources for committed secrets (patterns only, no values printed)..."
+          if grep -RInE "sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}" android/app/src/main/ 2>/dev/null; then
+            echo "::error::Possible secret pattern found in sources"
             exit 1
           fi
           echo "Secret scan clean."
@@ -93,7 +88,7 @@ jobs:
       - name: Build summary
         run: |
           {
-            echo "## ROCKY AI build"
+            echo "## ROCKY AI v4 (native Kotlin) build"
             echo ""
             echo "- Commit: ${{ github.sha }}"
             echo "- Ref: ${{ github.ref }}"
@@ -101,5 +96,40 @@ jobs:
             echo "- Package: com.modaliadz.rocky"
             echo "- App name: ROCKY AI"
             echo "- Status: build completed (this summary is written only if all prior steps passed)"
-            echo "- Tests: vitest unit tests (brain state machine, task store)"
+            echo "- Tests: JUnit unit tests (providers/failover, tasks, agent loop, jaw timing, back navigation)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Emulator screenshot: best-effort only. It must NOT block the APK job.
+  screenshot:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 25
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ROCKY_AI-debug-apk
+          path: apk
+
+      - name: Run on emulator and capture a screenshot
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r apk/app-debug.apk
+            adb shell am start -n com.modaliadz.rocky/.MainActivity
+            sleep 15
+            adb exec-out screencap -p > screenshot.png
+            ls -lh screenshot.png
+
+      - name: Upload screenshot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ROCKY_AI-screenshot
+          path: screenshot.png
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rocky_bg"
+    android:padding="16dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Projects"
+            android:textColor="@color/rocky_text"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Projects live in the app's private files. Generated web code runs only in the Preview screen, never as app code."
+            android:textColor="@color/rocky_dim"
+            android:textSize="12sp" />
+        <Button
+            android:id="@+id/buildDemoButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Build restaurant demo (scaffold)" />
+        <TextView
+            android:id="@+id/agentLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_dim"
+            android:textSize="12sp" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/projectList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <TextView
+            android:id="@+id/detailTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Select a project"
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/fileList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <EditText
+            android:id="@+id/fileViewer"
+            android:layout_width="match_parent"
+            android:layout_height="300dp"
+            android:gravity="top"
+            android:textColor="@color/rocky_text"
+            android:textColorHint="@color/rocky_dim"
+            android:background="@color/rocky_panel" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/saveFileButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Save file" />
+            <Button
+                android:id="@+id/previewButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Preview" />
+            <Button
+                android:id="@+id/exportButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Export ZIP" />
+            <Button
+                android:id="@+id/closeProjectsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Close" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

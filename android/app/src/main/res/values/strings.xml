@@ -1,7 +1,29 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ROCKY AI</string>
     <string name="title_activity_main">ROCKY AI</string>
-    <string name="package_name">com.modaliadz.rocky</string>
-    <string name="custom_url_scheme">com.modaliadz.rocky</string>
+    <string name="mic_desc">Microphone: tap to listen</string>
+    <string name="send_desc">Send message</string>
+    <string name="stop_desc">Stop speaking and listening</string>
+    <string name="settings_desc">Open settings</string>
+    <string name="tasks_desc">Open tasks</string>
+    <string name="hint_input">Talk to ROCKY…</string>
+    <string name="intro_skip">Skip intro</string>
+    <string name="status_idle">IDLE</string>
+    <string name="status_listening">LISTENING</string>
+    <string name="status_thinking">THINKING</string>
+    <string name="status_speaking">SPEAKING</string>
+    <string name="status_executing">EXECUTING</string>
+    <string name="status_error">ERROR</string>
+    <string name="status_intro">WAKING UP</string>
+    <string name="settings_title">Settings</string>
+    <string name="voice_test">Test voice</string>
+    <string name="save">Save</string>
+    <string name="close">Close</string>
+    <string name="mic_permission_needed">Microphone permission is needed to listen. Grant it in Android Settings &gt; Apps &gt; ROCKY AI &gt; Permissions, then try again.</string>
+    <string name="recognition_unavailable">Speech recognition is not available on this device. Type your message instead.</string>
+    <string name="tts_unavailable">Speech output is not available on this device. Replies are shown as text.</string>
+    <string name="offline_label">OFFLINE — local assistant only, no cloud model</string>
+    <string name="empty_history">No conversation yet. Tap the microphone and speak, or type below.</string>
+    <string name="retry">Retry</string>
 </resources>

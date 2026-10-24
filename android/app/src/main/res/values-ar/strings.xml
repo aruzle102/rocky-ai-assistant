@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ROCKY AI</string>
+    <string name="hint_input">تحدّث إلى ROCKY…</string>
+    <string name="intro_skip">تخطي المقدمة</string>
+    <string name="status_listening">يستمع</string>
+    <string name="status_thinking">يفكّر</string>
+    <string name="status_speaking">يتكلّم</string>
+    <string name="status_error">خطأ</string>
+    <string name="settings_title">الإعدادات</string>
+    <string name="voice_test">جرّب الصوت</string>
+    <string name="save">حفظ</string>
+    <string name="close">إغلاق</string>
+    <string name="empty_history">لا توجد محادثة بعد. اضغط على الميكروفون وتكلّم، أو اكتب أدناه.</string>
+    <string name="retry">إعادة المحاولة</string>
+</resources>

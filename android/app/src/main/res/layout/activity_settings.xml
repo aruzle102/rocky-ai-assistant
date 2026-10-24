@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rocky_bg"
+    android:padding="16dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_title"
+            android:textColor="@color/rocky_text"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Voice"
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <Spinner
+            android:id="@+id/voiceSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+        <TextView
+            android:id="@+id/pitchLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Pitch (lower = deeper)"
+            android:textColor="@color/rocky_dim" />
+        <SeekBar
+            android:id="@+id/pitchBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+        <TextView
+            android:id="@+id/rateLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Speech rate"
+            android:textColor="@color/rocky_dim" />
+        <SeekBar
+            android:id="@+id/rateBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100" />
+        <Button
+            android:id="@+id/testVoiceButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/voice_test" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Language (recognition + speech)"
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <Spinner
+            android:id="@+id/languageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="AI mode"
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <Spinner
+            android:id="@+id/modeSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Providers — tap Test for a real call. Keys stay on this phone only."
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/providerList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Provider connection (selected provider below — leave blank for keyless Pollinations / local)"
+            android:textColor="@color/rocky_dim" />
+        <Spinner
+            android:id="@+id/providerSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+        <EditText
+            android:id="@+id/baseUrlInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Base URL (optional override)"
+            android:textColor="@color/rocky_text"
+            android:textColorHint="@color/rocky_dim" />
+        <EditText
+            android:id="@+id/modelInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Model id (optional — discovered models preferred)"
+            android:textColor="@color/rocky_text"
+            android:textColorHint="@color/rocky_dim" />
+        <EditText
+            android:id="@+id/apiKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="API key (on this phone only, never shared)"
+            android:inputType="textPassword"
+            android:textColor="@color/rocky_text"
+            android:textColorHint="@color/rocky_dim" />
+        <EditText
+            android:id="@+id/accountInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Account ID (Cloudflare only)"
+            android:textColor="@color/rocky_text"
+            android:textColorHint="@color/rocky_dim" />
+        <TextView
+            android:id="@+id/providerNote"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_dim"
+            android:textSize="12sp" />
+        <Button
+            android:id="@+id/discoverButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Discover models" />
+        <TextView
+            android:id="@+id/discoverResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_dim"
+            android:textSize="12sp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Privacy"
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <CheckBox
+            android:id="@+id/memoryCloudCheck"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Include my name/notes in cloud model requests (default OFF)"
+            android:textColor="@color/rocky_text" />
+        <Button
+            android:id="@+id/clearHistoryButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Clear conversation history" />
+        <Button
+            android:id="@+id/clearMemoryButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Clear memory (name + notes)" />
+        <Button
+            android:id="@+id/exportButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Export history (share as text)" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Animation and sound"
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <CheckBox
+            android:id="@+id/sfxCheck"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Sound effects"
+            android:textColor="@color/rocky_text" />
+        <CheckBox
+            android:id="@+id/reducedCheck"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Reduced effects (weaker devices)"
+            android:textColor="@color/rocky_text" />
+        <Spinner
+            android:id="@+id/qualitySpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+        <Button
+            android:id="@+id/replayIntroButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Replay intro next launch" />
+        <TextView
+            android:id="@+id/permissionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_dim"
+            android:textSize="12sp" />
+        <Button
+            android:id="@+id/saveButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:text="@string/save" />
+        <Button
+            android:id="@+id/closeButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/close" />
+    </LinearLayout>
+</ScrollView>

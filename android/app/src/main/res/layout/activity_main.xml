@@ -1,12 +1,193 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    android:orientation="vertical"
+    android:background="@color/rocky_bg">
 
-    <WebView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="ROCKY AI"
+            android:textColor="@color/rocky_text"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.2" />
+        <TextView
+            android:id="@+id/modeLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SMART AUTO"
+            android:textColor="@color/rocky_cyan"
+            android:textSize="11sp"
+            android:paddingEnd="8dp" />
+        <Button
+            android:id="@+id/projectsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Projects" />
+        <Button
+            android:id="@+id/tasksButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Tasks"
+            android:contentDescription="@string/tasks_desc" />
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Settings"
+            android:contentDescription="@string/settings_desc" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/statusPill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:text="@string/status_idle"
+        android:textColor="@color/rocky_cyan"
+        android:textSize="11sp"
+        android:padding="8dp" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <android.opengl.GLSurfaceView
+            android:id="@+id/glView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+        <LinearLayout
+            android:id="@+id/introOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="#CC050914">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ROCKY"
+                android:textColor="@color/rocky_cyan"
+                android:textSize="34sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.3" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="waking up…"
+                android:textColor="@color/rocky_dim"
+                android:textSize="14sp" />
+            <Button
+                android:id="@+id/skipIntroButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginTop="24dp"
+                android:text="@string/intro_skip"
+                android:contentDescription="@string/intro_skip" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <com.modaliadz.rocky.AmplitudeView
+        android:id="@+id/amplitudeView"
+        android:layout_width="match_parent"
+        android:layout_height="28dp" />
+
+    <TextView
+        android:id="@+id/noticeText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:textColor="@color/rocky_warn"
+        android:textSize="13sp"
+        android:padding="10dp" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/chatList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp" />
+
+    <LinearLayout
+        android:id="@+id/tasksPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="@color/rocky_panel"
+        android:padding="12dp">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tasks — Plan, Execute, Verify, Report"
+            android:textColor="@color/rocky_text"
+            android:textStyle="bold" />
+        <EditText
+            android:id="@+id/taskInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. create note hello.txt with: Hello ROCKY, or research: Algiers"
+            android:textColor="@color/rocky_text"
+            android:textColorHint="@color/rocky_dim" />
+        <Button
+            android:id="@+id/runTaskButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Plan and run" />
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/taskList"
+            android:layout_width="match_parent"
+            android:layout_height="200dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:gravity="center_vertical">
+        <Button
+            android:id="@+id/micButton"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:text="🎤"
+            android:textSize="22sp"
+            android:contentDescription="@string/mic_desc" />
+        <EditText
+            android:id="@+id/inputText"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:hint="@string/hint_input"
+            android:textColor="@color/rocky_text"
+            android:textColorHint="@color/rocky_dim"
+            android:padding="12dp" />
+        <Button
+            android:id="@+id/sendButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Send"
+            android:contentDescription="@string/send_desc" />
+        <Button
+            android:id="@+id/stopButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Stop"
+            android:contentDescription="@string/stop_desc" />
+        <Button
+            android:id="@+id/muteButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="Mute" />
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="10dp">
+    <TextView
+        android:id="@+id/providerName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="15sp"
+        android:textColor="@color/rocky_text"
+        android:textStyle="bold" />
+    <TextView
+        android:id="@+id/providerStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="@color/rocky_dim" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <Button
+            android:id="@+id/testProviderButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:text="Test" />
+        <Button
+            android:id="@+id/toggleProviderButton"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:text="Enable / Disable" />
+    </LinearLayout>
+</LinearLayout>

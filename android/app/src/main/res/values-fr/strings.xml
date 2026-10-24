@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ROCKY AI</string>
+    <string name="hint_input">Parlez à ROCKY…</string>
+    <string name="intro_skip">Passer l’intro</string>
+    <string name="status_listening">ÉCOUTE</string>
+    <string name="status_thinking">RÉFLEXION</string>
+    <string name="status_speaking">PARLE</string>
+    <string name="status_error">ERREUR</string>
+    <string name="settings_title">Paramètres</string>
+    <string name="voice_test">Tester la voix</string>
+    <string name="save">Enregistrer</string>
+    <string name="close">Fermer</string>
+    <string name="empty_history">Aucune conversation. Appuyez sur le micro et parlez, ou écrivez ci-dessous.</string>
+    <string name="retry">Réessayer</string>
+</resources>
