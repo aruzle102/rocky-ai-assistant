@@ -130,7 +130,12 @@ jobs:
           arch: x86_64
           target: google_apis
           script: |
-            adb install -r apk/app-debug.apk
+            adb wait-for-device
+            # Install retry: run 40142349835 failed here once with
+            # "Broken pipe (32)" right after boot (adb transport flake).
+            for i in 1 2 3; do
+              adb install -r apk/app-debug.apk && break || sleep 10
+            done
             adb shell am start -n com.modaliadz.rocky/.MainActivity
             sleep 15
             adb exec-out screencap -p > screenshot.png
@@ -187,15 +192,25 @@ jobs:
           arch: x86_64
           target: google_apis
           script: |
-            adb install -r apk/app-debug.apk
-            adb shell screenrecord --time-limit 75 /sdcard/rocky-demo.mp4 &
+            adb wait-for-device
+            # Install retry: run 40142349835 failed here once with
+            # "Broken pipe (32)" right after boot (adb transport flake).
+            for i in 1 2 3; do
+              adb install -r apk/app-debug.apk && break || sleep 10
+            done
+            # NOTE (run 40142349835 fixes): screenrecord to /sdcard root
+            # fails with "Permission denied" on API 34 — use Download/.
+            # PreviewActivity is deliberately NOT exported, so it must
+            # NOT be launched via adb (SecurityException); the app
+            # itself opens Preview automatically when the agent finishes
+            # (pending-preview delivery in MainActivity).
+            adb shell screenrecord --time-limit 120 /sdcard/Download/rocky-demo.mp4 &
             sleep 2
             adb shell am start -n com.modaliadz.rocky/.MainActivity --es demo_question "Build a professional restaurant website with a menu, gallery, responsive design, and reservation form"
-            sleep 40
-            adb shell am start -n com.modaliadz.rocky/.PreviewActivity --es slug restaurant
-            sleep 35
-            adb pull /sdcard/rocky-demo.mp4 ./rocky-demo.mp4 || echo "demo video pull failed"
-            ls -lh rocky-demo.mp4 || true
+            sleep 125
+            adb pull /sdcard/Download/rocky-demo.mp4 ./rocky-demo.mp4
+            test -s rocky-demo.mp4
+            ls -lh rocky-demo.mp4
 
       - name: Upload demo video artifact
         if: always()
