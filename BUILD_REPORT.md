@@ -97,3 +97,11 @@ WebGL fallback. Icon inspected and kept (1024px particle head, glowing
 eyes). Workflow unchanged (runner-preinstalled SDK + setup-java v5).
 Local verification before push: vitest 13/13, tsc + vite build pass
 (676 KB JS), dist secret-pattern scan clean.
+
+## v2 — SUCCESS (2026-10-24 ~22:10 CET)
+- Successful run: https://github.com/aruzle102/rocky-ai-assistant/actions/runs/40137239976 (commit 1a3d093, 1m57s, all steps passed)
+- Artifact: ROCKY_AI-debug-apk / app-debug.apk, 4,121,083 bytes, downloaded and verified.
+- Zip integrity: bad_file None, 483 entries. v2 bundle confirmed inside the APK (strings "pollinations", "Skip intro", "FREE PUBLIC" present in assets/public/assets/index-CFm87_z-.js).
+- aapt (CI log): package: name='com.modaliadz.rocky' versionCode='1' versionName='1.0' compileSdkVersion='34'; application-label:'ROCKY AI'.
+- Local tests: vitest 13/13, tsc + vite build pass, dist secret-pattern scan clean.
+- Still NOT device-tested: launch, face rendering, intro, mic, recognition ar-DZ/fr/en, TTS quality, icon on home screen, back button.
