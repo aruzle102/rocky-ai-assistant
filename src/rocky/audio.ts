@@ -14,11 +14,23 @@ export const LANG_OPTIONS: { code: LangCode; label: string; recog: string }[] = 
 ];
 
 export function pickMaleVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  return pickVoiceForLang(voices, 'en-US', '');
+}
+
+const MALE_HINTS = ['male', 'david', 'guy', 'daniel', 'aaron', 'james', 'microsoft guy', 'google uk english male'];
+
+/** Voice selection, in priority order: exact name the user picked, then a
+ * male-sounding voice in the reply language, then any voice in that language,
+ * then a male English voice, then the first voice. Returns null if none. */
+export function pickVoiceForLang(voices: SpeechSynthesisVoice[], langTag: string, preferredName: string): SpeechSynthesisVoice | null {
   if (!voices.length) return null;
-  const maleHints = ['male', 'david', 'guy', 'daniel', 'aaron', 'james', 'microsoft guy', 'google uk english male'];
   const lower = (v: SpeechSynthesisVoice) => v.name.toLowerCase();
+  const langPrefix = langTag.split('-')[0];
   return (
-    voices.find((v) => maleHints.some((h) => lower(v).includes(h))) ||
+    (preferredName ? voices.find((v) => v.name === preferredName) || null : null) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith(langPrefix) && MALE_HINTS.some((h) => lower(v).includes(h))) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith(langPrefix)) ||
+    voices.find((v) => MALE_HINTS.some((h) => lower(v).includes(h))) ||
     voices.find((v) => v.lang.startsWith('en')) ||
     voices[0]
   );
@@ -97,13 +109,34 @@ export class RockyAudio {
     return window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
   }
 
+  /** Voices load asynchronously on most devices: resolve with the real list,
+   * waiting briefly for the voiceschanged event instead of returning []. */
+  listVoices(): Promise<SpeechSynthesisVoice[]> {
+    if (!window.speechSynthesis) return Promise.resolve([]);
+    const first = this.getVoices();
+    if (first.length) return Promise.resolve(first);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(this.getVoices()); } };
+      window.speechSynthesis.addEventListener('voiceschanged', finish, { once: true });
+      window.setTimeout(finish, 1000);
+    });
+  }
+
   /** Speak with a deep male voice where available. Returns a stop function.
-   *  onEnvelope receives a synthetic 0..1 envelope (TTS timing, NOT raw audio). */
-  speak(text: string, opts: { rate: number; pitch: number; volume: number }, onEnvelope: (a: number) => void, onEnd: () => void): () => void {
+   *  onEnvelope receives a synthetic 0..1 envelope (TTS timing, NOT raw audio).
+   *  Android-native TTS audio route investigated: Capacitor's WebView TTS
+   *  (speechSynthesis) and the native TTS plugins both expose no raw audio
+   *  stream, so a true audio-driven viseme is not available from this stack;
+   *  the mouth is driven by this syllable-timing envelope instead, and the
+   *  code says so rather than claiming raw-audio lip-sync. */
+  speak(text: string, opts: { rate: number; pitch: number; volume: number; voiceName?: string; lang?: string }, onEnvelope: (a: number) => void, onEnd: () => void): () => void {
     if (!window.speechSynthesis) { onEnd(); return () => undefined; }
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
-    const voice = pickMaleVoice(this.getVoices());
+    const langTag = opts.lang || 'en-US';
+    utt.lang = langTag;
+    const voice = pickVoiceForLang(this.getVoices(), langTag, opts.voiceName || '');
     if (voice) utt.voice = voice;
     utt.rate = opts.rate;
     utt.pitch = Math.max(0, Math.min(2, opts.pitch)); // default UI range 0.7–0.85 = deep voice

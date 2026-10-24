@@ -34,3 +34,13 @@ button:disabled { opacity: 0.5; }
 .notice { padding: 10px 14px; font-size: 13px; color: #fbbf24; }
 .modebar { display: flex; gap: 8px; padding: 0 14px 4px; font-size: 12px; align-items: center; }
 .modebar b.offline { color: #fbbf24; } .modebar b.connected { color: #34d399; }
+
+/* v2 additions: intro overlay, segmented controls, thinking bubble */
+.intro { position: fixed; inset: 0; background: #000; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; transition: opacity 0.5s ease; pointer-events: none; }
+.intro-word { font-size: 44px; font-weight: 800; letter-spacing: 0.3em; color: #bfefff; text-shadow: 0 0 24px #22d3ee; }
+.intro-sub { font-size: 13px; letter-spacing: 0.2em; color: #22d3ee; }
+.intro-skip { pointer-events: auto; margin-top: 24px; }
+.seg button { padding: 8px 12px; }
+.msg.thinking { animation: rocky-pulse 1.2s ease-in-out infinite; }
+@keyframes rocky-pulse { 0%, 100% { opacity: 0.65; } 50% { opacity: 1; } }
+.modebar b.free { color: #fbbf24; }

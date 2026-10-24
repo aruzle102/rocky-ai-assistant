@@ -85,3 +85,15 @@ size, and the CI `aapt` package line → copy APK to
 - **aapt (from CI log):** package: name='com.modaliadz.rocky' versionCode='1' versionName='1.0' compileSdkVersion='34'; application-label:'ROCKY AI'.
 - **Install:** on Android, allow install from this source if prompted, open ROCKY AI, grant Microphone when asked. This is a debug APK (signed with the debug key), not a Play Store release.
 - **Still NOT tested on a device (no emulator/phone here):** app launch, hologram rendering on device, mic permission flow, speech recognition ar-DZ/fr-FR/en-US, TTS voice quality, icon appearance on a home screen. Test these on the user's phone and report back.
+
+## v2 — FIX (2026-10-24, in progress at write time; updated with the final run below)
+
+Audit findings fixed (see README v2 section): face with eyes/gaze/blink/
+mouth, cinematic intro, generated SFX, voice list + test, three honest AI
+modes (local tools / Pollinations GET free / connected), full settings
+with privacy controls, pending-task execution with real file creation,
+unsupported-action reporting, back-button ref fix, adaptive performance,
+WebGL fallback. Icon inspected and kept (1024px particle head, glowing
+eyes). Workflow unchanged (runner-preinstalled SDK + setup-java v5).
+Local verification before push: vitest 13/13, tsc + vite build pass
+(676 KB JS), dist secret-pattern scan clean.

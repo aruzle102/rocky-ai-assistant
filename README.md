@@ -95,3 +95,107 @@ and uploads it as artifact `ROCKY_AI-debug-apk`.
 - Speech services on the device for recognition/TTS quality (vendor-dependent).
 - A physical phone test for: launch, hologram rendering, mic flow,
   recognition in ar-DZ/fr/en, TTS voice quality, install + icon.
+
+## v2 — what changed vs v1 (2026-10-24)
+
+v1 was a particle cloud with no face, no intro, no sound effects, canned
+offline replies, and a plan flow that marked plans done instantly. v2 fixes
+those exact defects in the same repo and pipeline:
+
+- **Real 3D face** (`src/rocky/face.ts` + upgraded `hologram.ts`): a
+  procedural head (translucent shell + wireframe skull, original geometry,
+  no stock model, no image) with glowing eyes, gaze that follows pointer/
+  touch plus idle saccades, blinking, brow tilt per state, head yaw/pitch
+  idle motion, and a jaw/mouth that opens with speech amplitude. Particle
+  skin kept, but mobile density dropped 4500 → 3200 pts (desktop 9000 →
+  7000), pixel-ratio cap 2.0 / 1.75 mobile, and sustained low FPS now
+  actually reduces density + pixel ratio (v1 only notified).
+- **Cinematic intro** (skippable, ~3.6s, first launch + replay in
+  Settings): black → generated WebAudio hum → blue particles converge
+  from a scattered cloud into the face (GPU `uForm` morph, spring easing
+  with tiny overshoot only, camera push-in) → eyes open ("wake") → fade
+  into the assistant. Intro is a real app state, not a splash image. The
+  launcher icon and native splash were inspected and kept: the 1024px icon
+  already reads as a particle head with glowing eyes at small size.
+- **Sound design** (`src/rocky/sfx.ts`, WebAudio-generated, no audio
+  files): intro hum, UI tap, listening chime, success/error tones, with an
+  SFX on/off toggle and volume in Settings. Mute stops speech and SFX.
+- **Voice** (`audio.ts`): real device voice list (async `voiceschanged`
+  load), user voice selection, "Test voice" button, rate/pitch/volume.
+  Speaking mouth motion is a syllable-timing envelope, NOT raw TTS audio:
+  Web Speech TTS and native TTS plugins expose no raw audio stream, so a
+  true audio-driven viseme is unavailable from this stack — the code and
+  UI say so instead of claiming lip-sync.
+- **AI providers** (`brain.ts`): three labelled modes — Local (useful
+  local tools: time/date, safe calculator, unit conversion, city times,
+  editable memory, plans, files; never presented as a model), Free public
+  (Pollinations, no key, GET only — see test results below, off by
+  default, privacy warning, never for sensitive input), and Connected
+  (user OpenAI-compatible endpoint/key, on-device only).
+- **Settings** (proper drawer): reply language en/fr/ar (core Rocky
+  replies + settings labels translated — partial i18n, stated as such),
+  voice list + test, rate/pitch/volume, SFX toggle + volume, particle
+  quality, profile name + editable notes, provider choice with privacy
+  notes, privacy controls (clear conversation, clear memory, export
+  history as text / copy / download), intro replay.
+- **Tasks fixed**: a plan creates a PENDING task with per-step status;
+  "Run plan" executes steps — the file step actually creates a real file
+  in the app store, other steps are honestly labelled "planning only, no
+  system action". Destructive actions still need confirmation. SMS,
+  calls, purchases, phone photos/contacts are reported UNSUPPORTED and
+  never marked done. Android sandbox limits stay explicit.
+- **Back button fixed**: the Capacitor back listener now reads a ref
+  mirroring the drawer state (v1 closed over the initial `drawer=null`
+  and could exit with a drawer open).
+- **WebGL fallback**: if the renderer cannot be created, the app shows a
+  clear message and chat/files/settings still work.
+
+## Research sources actually used (v2)
+
+- https://www.promptsmotion.com/ — motion grammar actually read: five
+  pillars (role, technical context, duration/framerate, second-by-second
+  breakdown, palette + easing), spring/Bezier easing, ban on generic
+  glows/particles/bouncy easing, one continuous morph without hard cuts.
+  Applied restrained: one purposeful convergence morph, tiny spring
+  overshoot only, no decorative glitter, no dead time. Note the tension:
+  Prompt Motion bans generic particle effects, while ROCKY explicitly
+  requires particles — v2 uses particles only as the single forming
+  figure, not as decoration.
+- https://21st.dev/ — homepage only (component library, shadcn-style
+  React/TypeScript components, bottom-sheet and chat-interface patterns).
+  No 21st component code was copied into this repo; the settings drawer
+  and chat layout adapt the general interaction ideas (segmented
+  provider choice, bottom-sheet settings, mode badges) with original code.
+- https://threejs.org/docs/ — core docs index (geometries including
+  Lathe/Sphere, materials, lights, WebGLRenderer, Fog). The face uses
+  standard Sphere/Box/Cone geometry + MeshBasicMaterial + Points with a
+  custom ShaderMaterial, all from the public docs.
+
+## Free-AI routes tested (2026-10-24, from the build VM, no keys)
+
+- **Pollinations GET** `https://text.pollinations.ai/<prompt>`:
+  VERIFIED WORKING — "17 plus 25, number only" → `42`, HTTP 200, ~5.4s;
+  capital of Algeria → `Algiers is the capital of Algeria`, HTTP 200.
+  Wired into the app (GET only, history truncated to ~1500 chars).
+- **Pollinations POST** (JSON, model openai): UNRELIABLE — first attempt
+  timed out after 30s with 0 bytes; a second attempt eventually returned
+  `7` for 3+4 (HTTP 200) but far too slowly to use. NOT wired.
+- **OpenRouter models list** (no key): HTTP 200 for the public list only;
+  chat requires a key — NOT wired, NOT claimed as free.
+- **Groq / Google AI Studio free tiers**: require a free key obtained by
+  the user — no key exists in this project, so NOT tested and NOT wired.
+  Documented in Settings as user-key options only.
+
+## Honest limits — v2 (read before judging)
+
+- Speaking mouth motion is envelope-driven, not raw-audio lip-sync
+  (see Voice above). Listening visuals use the REAL mic analyser.
+- Free public mode is not private and not guaranteed: rate-limited,
+  may change or disappear, and prompts travel in a URL.
+- Partial i18n: core replies + settings labels in en/fr/ar; free/
+  connected model text follows the reply language via prompt, but the
+  whole app is not fully translated.
+- **NOT device-tested** (no emulator or phone here): launch, face
+  rendering, intro timing, mic flow, recognition ar-DZ/fr/en, TTS voice
+  quality, icon on a home screen, back button on a real phone. Code and
+  CI tests pass; device behaviour must be confirmed on the user's phone.
