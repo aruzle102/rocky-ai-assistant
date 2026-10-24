@@ -35,7 +35,10 @@ class RockyTts(context: Context) {
     private var estimatedMs = 0L
     private var wordCount = 1
 
-    private val tts = TextToSpeech(context) { status ->
+    private lateinit var tts: TextToSpeech
+
+    init {
+        tts = TextToSpeech(context) { status ->
         if (status == TextToSpeech.SUCCESS) {
             ready = true
             try { voices = tts.voices?.toList() ?: emptyList() } catch (_: Exception) { voices = emptyList() }
@@ -63,6 +66,7 @@ class RockyTts(context: Context) {
             })
         } else {
             ready = false
+        }
         }
     }
 

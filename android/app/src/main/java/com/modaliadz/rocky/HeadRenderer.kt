@@ -140,9 +140,9 @@ class HeadRenderer : GLSurfaceView.Renderer {
             for (j in 0..lonSteps) {
                 val u = 2 * PI * j / lonSteps
                 val cosU = cos(u); val sinU = sin(u)
-                var x = sinV * cosU * 0.82f
-                var y = cosV * 1.15f
-                var z = sinV * sinU * 0.92f
+                var x = (sinV * cosU * 0.82).toFloat()
+                var y = (cosV * 1.15).toFloat()
+                var z = (sinV * sinU * 0.92).toFloat()
                 val front = max(0f, sinU.toFloat())
                 // Brow ridge
                 val brow = exp(-((y - 0.50f) * (y - 0.50f)) / 0.03f) * front

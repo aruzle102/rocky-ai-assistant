@@ -209,7 +209,7 @@ class ProviderEngine(
         val headers = mutableMapOf("Content-Type" to "application/json")
         if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
         val r = http.post(base.trimEnd('/') + "/chat/completions", headers, body)
-        if (r.code == 401 || r.code == 403) throw RuntimeException("HTTP $codeText(r.code): check the API key for ${p.name}")
+        if (r.code == 401 || r.code == 403) throw RuntimeException("HTTP ${r.code}: check the API key for ${p.name}")
         if (r.code == 429) throw RuntimeException("HTTP 429: ${p.name} rate limit reached — try again later or switch provider")
         if (r.code != 200) throw RuntimeException("${p.name} HTTP ${r.code}")
         // content lives inside choices[0].message.content
@@ -282,7 +282,7 @@ class ProviderEngine(
         val synthesis = when {
             first == null && second == null -> "Compare failed: no provider answered. Check Settings and try again."
             second == null -> "Only ${first!!.providerId} answered, so there is nothing to compare against."
-            else -> "Synthesis from both answers: ${first.providerId} says “${first.text.take(160)}” and ${second.providerId} says “${second.text.take(160)}”. Use the first answer unless it conflicts with the second, in which case prefer the more specific one."
+            else -> "Synthesis from both answers: ${first?.providerId} says “${first?.text?.take(160)}” and ${second?.providerId} says “${second?.text?.take(160)}”. Use the first answer unless it conflicts with the second, in which case prefer the more specific one."
         }
         return CompareResult(first, second, synthesis)
     }

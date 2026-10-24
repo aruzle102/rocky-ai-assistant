@@ -106,11 +106,15 @@ class ProjectsActivity : AppCompatActivity() {
     }
 
     private fun buildRestaurantDemo() {
+        // Agent console log (JARVIS console pattern, original UI): every
+        // step is appended — step, tool, status, output — never overwritten.
+        val logLines = mutableListOf<String>()
         agentLog.text = "Agent running (scaffold tool — not model output)…"
         Thread {
             val runtime = AgentRuntime(tools) { step ->
                 runOnUiThread {
-                    agentLog.text = "Step: ${step.tool} — ${step.status} — ${step.output}"
+                    logLines.add("Step: ${step.tool} — ${step.status} — ${step.output}")
+                    agentLog.text = logLines.takeLast(20).joinToString("\n")
                 }
             }
             val result = runtime.run(
@@ -118,7 +122,8 @@ class ProjectsActivity : AppCompatActivity() {
                 null, AtomicBoolean(false)
             )
             runOnUiThread {
-                agentLog.text = result.message
+                logLines.add("Result: ${result.message}")
+                agentLog.text = logLines.takeLast(20).joinToString("\n")
                 refreshProjects()
             }
         }.start()

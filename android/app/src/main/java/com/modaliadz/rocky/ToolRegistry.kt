@@ -22,6 +22,14 @@ class ToolRegistry(
     private val notes: NoteStore,
     private val research: ResearchClient
 ) {
+    companion object {
+        /** Plans may use ONLY these tools (planner discipline). */
+        val knownTools = setOf(
+            "create_file", "edit_file", "read_file", "list_files", "delete_file",
+            "web_research", "create_note", "create_reminder", "open_url",
+            "explain_code", "validate_project", "preview_project", "export_project_zip"
+        )
+    }
     fun projectDir(slug: String): File = File(projectsRoot, slug)
 
     fun listProjectFiles(slug: String): List<String> {
@@ -92,7 +100,7 @@ class ToolRegistry(
 
     /** Explain a file with LOCAL analysis only (structure, not a model). */
     fun explainFile(slug: String?, filename: String): String {
-        val content = if (slug != null) readProjectFile(slug, filename) else flatFiles.read(filename)
+        val content = (if (slug != null) readProjectFile(slug, filename) else flatFiles.read(filename))
             ?: return "File not found: $filename"
         val lines = content.lines().size
         val funs = Regex("""(?:function\s+(\w+)|fun\s+(\w+))""").findAll(content)
@@ -118,7 +126,7 @@ class ToolRegistry(
                 val filename = args["filename"] ?: return ToolResult(ToolStatus.FAILED, "edit_file needs filename")
                 val old = args["old"] ?: return ToolResult(ToolStatus.FAILED, "edit_file needs old text")
                 val newText = args["new"] ?: ""
-                val current = if (slug != null) readProjectFile(slug, filename) else flatFiles.read(filename)
+                val current = (if (slug != null) readProjectFile(slug, filename) else flatFiles.read(filename))
                     ?: return ToolResult(ToolStatus.FAILED, "File not found: $filename")
                 if (!current.contains(old)) return ToolResult(ToolStatus.FAILED, "Old text not found in $filename")
                 val updated = current.replace(old, newText)

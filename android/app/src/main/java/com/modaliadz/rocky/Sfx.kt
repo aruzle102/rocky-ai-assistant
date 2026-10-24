@@ -27,19 +27,16 @@ class Sfx {
                     for (f in freqs) s += sin(2 * Math.PI * f * t) / freqs.size
                     buf[i] = (s * 12000 * vol * volume * fade).toInt().toShort()
                 }
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setSampleRate(rate).setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()
-                    )
-                    .setBufferSizeInFrames(frames)
-                    .setTransferMode(AudioTrack.MODE_STATIC).build()
+                // Classic AudioTrack constructor: setBufferSizeInFrames is
+                // not available on AudioTrack.Builder on every API level, and
+                // the builder call failed compilation (run 40140687239).
+                // Buffer size is frames * 2 bytes (16-bit mono).
+                @Suppress("DEPRECATION")
+                val track = AudioTrack(
+                    android.media.AudioManager.STREAM_MUSIC, rate,
+                    AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                    frames * 2, AudioTrack.MODE_STATIC
+                )
                 track.write(buf, 0, frames)
                 track.play()
                 Thread.sleep(durationMs.toLong() + 50)

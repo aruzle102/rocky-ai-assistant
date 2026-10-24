@@ -174,6 +174,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.clearMemoryButton).setOnClickListener {
             store.clearMemory()
+            store.clearCappedMemory()
             Toast.makeText(this, "Memory cleared", Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.exportButton).setOnClickListener {
@@ -191,7 +192,8 @@ class SettingsActivity : AppCompatActivity() {
         val permStatus = findViewById<TextView>(R.id.permissionStatus)
         val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         permStatus.text = "Microphone permission: ${if (micOk) "GRANTED" else "NOT GRANTED — grant it in Android Settings > Apps > ROCKY AI > Permissions"}. " +
-            "Speech recognition and TTS depend on this device's speech services."
+            "Speech recognition and TTS depend on this device's speech services. " +
+            "Keys stored: ${if (store.keysEncrypted) "encrypted (EncryptedSharedPreferences)" else "app-private fallback (encryption unavailable on this device)"}."
 
         findViewById<Button>(R.id.saveButton).setOnClickListener {
             val voice = if (voiceSpinner.selectedItem != null) voiceSpinner.selectedItem.toString() else null
@@ -217,9 +219,20 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun testProvider(p: Provider) {
-        discoverResult.text = "Testing ${p.name} with a real prompt…"
+        discoverResult.text = "Validating ${p.name} key via its models list, then testing with a real prompt…"
         Thread {
             try {
+                // Key validation FIRST (JARVIS api_key_validator pattern):
+                // list models before any chat call. Providers without a
+                // models endpoint skip straight to the chat test.
+                if (p.modelsUrl != null) {
+                    val ids = try {
+                        engine.discoverModels(p, store.providerKey(p.id))
+                    } catch (e: Exception) {
+                        throw RuntimeException("Key validation via models list failed: ${e.message}")
+                    }
+                    runOnUiThread { discoverResult.text = "Key validated for ${p.name}: ${ids.size} models listed. Now testing with a real prompt…" }
+                }
                 val start = System.currentTimeMillis()
                 val res = engine.chat(
                     "Say OK in one word.", emptyList(), AiMode.SMART_AUTO,

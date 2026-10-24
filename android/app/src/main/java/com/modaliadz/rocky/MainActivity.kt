@@ -207,6 +207,15 @@ class MainActivity : AppCompatActivity() {
             introOverlay.visibility = View.GONE
             setState(RockyState.IDLE)
         }
+
+        // Emulator-demo hook ONLY: when launched with an intent extra
+        // "demo_question", send it automatically after the intro. Normal
+        // launches never carry this extra, so users are never affected.
+        // Used by the CI emulator demo job to show a typed (not spoken —
+        // emulators have no real mic) request end to end.
+        intent.getStringExtra("demo_question")?.let { demo ->
+            handler.postDelayed({ send(demo) }, 6500)
+        }
     }
 
     private fun startIntro() {

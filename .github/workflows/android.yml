@@ -133,3 +133,48 @@ jobs:
           path: screenshot.png
           if-no-files-found: warn
           retention-days: 30
+
+  # Continuous demo recording: silent emulator video ONLY (adb
+  # screenrecord records NO audio, and an emulator has no real mic, so
+  # this can never prove a spoken question or an audible answer — it
+  # shows launch, intro, face, a TYPED agent request, and the project
+  # preview. Best-effort, must NOT block the APK job. No audio is ever
+  # dubbed onto it; the voice loop stays code + unit-test + provider
+  # evidence, with phone testing still required for audible speech.
+  demo:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 25
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ROCKY_AI-debug-apk
+          path: apk
+
+      - name: Record silent emulator demo (launch, agent request, preview)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r apk/app-debug.apk
+            adb shell screenrecord --time-limit 75 /sdcard/rocky-demo.mp4 &
+            sleep 2
+            adb shell am start -n com.modaliadz.rocky/.MainActivity --es demo_question "Build a professional restaurant website with a menu, gallery, responsive design, and reservation form"
+            sleep 40
+            adb shell am start -n com.modaliadz.rocky/.PreviewActivity --es slug restaurant
+            sleep 35
+            adb pull /sdcard/rocky-demo.mp4 ./rocky-demo.mp4 || echo "demo video pull failed"
+            ls -lh rocky-demo.mp4 || true
+
+      - name: Upload demo video artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ROCKY_AI-demo-video
+          path: rocky-demo.mp4
+          if-no-files-found: warn
+          retention-days: 30

@@ -15,6 +15,10 @@ class MemoryStore(context: Context) : FileStore, NoteStore {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("rocky-prefs", Context.MODE_PRIVATE)
     private val filesDir: File = context.filesDir
+    private val keyStore = KeyStore(context)
+
+    /** True when keys are in EncryptedSharedPreferences; false = app-private fallback. */
+    val keysEncrypted: Boolean get() = keyStore.encrypted
 
     // --- simple prefs ---
     var userName: String
@@ -57,9 +61,25 @@ class MemoryStore(context: Context) : FileStore, NoteStore {
         get() = prefs.getString("preferred_provider", null)
         set(v) = prefs.edit().putString("preferred_provider", v).apply()
 
-    // --- provider credentials (app-private only) ---
-    fun providerKey(id: String): String = prefs.getString("key_$id", "") ?: ""
-    fun setProviderKey(id: String, v: String) = prefs.edit().putString("key_$id", v).apply()
+    // --- provider credentials: encrypted store first, legacy app-private
+    // prefs as read-through fallback (writes always go to the key store) ---
+    fun providerKey(id: String): String =
+        keyStore.get(id) ?: (prefs.getString("key_$id", "") ?: "")
+    fun setProviderKey(id: String, v: String) {
+        keyStore.set(id, v)
+        prefs.edit().remove("key_$id").apply()
+    }
+
+    // --- capped categorized memory (identity / preferences / projects /
+    // relationships / wishes / notes; 380 chars per value, 2200 total) ---
+    fun cappedMemory(): CappedMemory {
+        val m = CappedMemory()
+        m.fromJson(prefs.getString("capped_memory", "[]") ?: "[]")
+        return m
+    }
+    fun saveCappedMemory(m: CappedMemory) =
+        prefs.edit().putString("capped_memory", m.toJson()).apply()
+    fun clearCappedMemory() = prefs.edit().remove("capped_memory").apply()
     fun providerModel(id: String): String = prefs.getString("model_$id", "") ?: ""
     fun setProviderModel(id: String, v: String) = prefs.edit().putString("model_$id", v).apply()
     fun providerBaseUrl(id: String): String = prefs.getString("base_$id", "") ?: ""

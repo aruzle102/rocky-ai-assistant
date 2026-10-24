@@ -223,13 +223,25 @@ class AgentRuntime(
             } + listOf("validate_project" to mapOf("slug" to slug))
         }
 
-        // 2. EXECUTE (bounded iterations, bounded retries, cancellable)
+        // 1b. PLANNER DISCIPLINE: only listed tools, capped steps, no
+        // duplicates, never an empty file first. Skips are logged, not hidden.
+        val validated = AgentPlanner.validatePlan(plan, ToolRegistry.knownTools, MAX_ITERATIONS)
+        for (reason in validated.skipped) {
+            val s = AgentStep("plan", emptyMap(), AgentStepStatus.FAILED, reason, 0L)
+            steps.add(s); onStep(s)
+        }
+        plan = validated.steps
+
+        // 2. EXECUTE (bounded iterations, bounded retries, cancellable).
+        // Failures go through the RETRY / SKIP / REPLAN / ABORT vocabulary —
+        // no ad-hoc retries, no infinite loops.
         var iterations = 0
         for ((tool, args) in plan) {
             if (cancelled.get()) break
             if (timedOut() || iterations >= MAX_ITERATIONS) break
             iterations++
             var attempt = 0; var ok = false; var out = ""
+            var decision = RecoveryDecision.ABORT
             while (attempt < MAX_ATTEMPTS_PER_TOOL && !ok && !cancelled.get()) {
                 attempt++
                 val s = record(tool, args)
@@ -243,10 +255,18 @@ class AgentRuntime(
                     out = "Error: ${e.message}"
                     finishStep(s, false, out, t0)
                 }
+                if (!ok) {
+                    val rec = AgentErrorHandler.decide(out, attempt, MAX_ATTEMPTS_PER_TOOL)
+                    decision = rec.decision
+                    s.output = "${rec.decision}: ${rec.reason} — ${rec.userMessage}".take(400)
+                    onStep(s)
+                    if (rec.decision != RecoveryDecision.RETRY) break
+                }
             }
-            if (!ok) {
-                // Validation/fix cycle is handled below; other failures stop the plan.
-                if (tool != "validate_project") break
+            if (!ok && decision != RecoveryDecision.SKIP) {
+                // REPLAN/ABORT stop the plan; the validate + fix cycle below
+                // still runs, and the final report states the exact failure.
+                break
             }
         }
 
