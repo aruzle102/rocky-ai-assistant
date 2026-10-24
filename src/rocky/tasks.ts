@@ -86,6 +86,81 @@ export class TaskStore {
   }
 }
 
+/* ---------- reminders + notes (in-app only, not system alarms) ---------- */
+
+export interface Reminder { id: string; text: string; dueAt: number; done: boolean; createdAt: number }
+const REM_KEY = 'rocky-reminders-v1';
+
+export function loadReminders(): Reminder[] { return load<Reminder[]>(REM_KEY, []); }
+export function saveReminders(r: Reminder[]) { save(REM_KEY, r); }
+
+/** Plan → Execute → Verify → Report.
+ *  - file steps: create the file, then VERIFY it exists with the expected
+ *    content (read-back). A step is done only after verification.
+ *  - research steps: actually call the research function, verify a summary
+ *    + source came back.
+ *  - note/reminder steps: actually store the note/reminder in-app.
+ *  - generic planning/review steps: honestly labelled "planning only, no
+ *    system action" — never reported as a system action.
+ *  Returns the final report text; the caller persists the task object. */
+export interface ExecuteDeps {
+  createFile: (name: string, content: string) => VirtualFile;
+  listFiles: () => VirtualFile[];
+  research: (query: string) => Promise<{ summary: string; source: string; url: string }>;
+  addReminder: (text: string, dueAt: number) => Reminder;
+  addNote: (note: string) => void;
+}
+
+export async function executePlan(
+  task: TaskItem, store: TaskStore, deps: ExecuteDeps,
+): Promise<{ report: string; failed: boolean }> {
+  if (!task.steps) return { report: 'No steps in this plan.', failed: true };
+  store.setTask(task.id, 'running', 'Executing steps…');
+  let failed = false;
+  const lines: string[] = [];
+  for (let i = 0; i < task.steps.length; i++) {
+    const step = task.steps[i];
+    const low = step.text.toLowerCase();
+    try {
+      if (low.includes('create the first file') || low.startsWith('create file')) {
+        const goal = task.title.replace(/^plan:?\s*/i, '');
+        const slug = goal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'plan';
+        const content = `# ${goal}\n\nDraft created by ROCKY from the plan "${task.title}".\n\nSteps:\n${task.steps.map((s, j) => `${j + 1}. ${s.text}`).join('\n')}\n`;
+        const file = deps.createFile(`${slug}.txt`, content);
+        // VERIFY: read back and check the content matches what was written.
+        const found = deps.listFiles().find((f) => f.name === file.name);
+        if (!found || found.content !== content) throw new Error('File verification failed: created file not found or content mismatch.');
+        store.setStep(task.id, i, 'done', `Created + verified file ${file.name}.`);
+        lines.push(`✓ ${step.text} — created + verified ${file.name}`);
+      } else if (low.includes('research') || low.includes('web research')) {
+        const query = task.title.replace(/^plan:?\s*/i, '').replace(/^research:?\s*/i, '');
+        const res = await deps.research(query || step.text);
+        if (!res.summary) throw new Error('Research returned no summary.');
+        store.setStep(task.id, i, 'done', `Research verified: ${res.source} — ${res.summary.slice(0, 120)}…`);
+        lines.push(`✓ ${step.text} — research verified (${res.source})`);
+      } else if (low.includes('reminder') || low.includes('remind')) {
+        const rem = deps.addReminder(task.title, Date.now() + 3600_000);
+        store.setStep(task.id, i, 'done', `Reminder stored in-app: ${rem.text} (due in 1h, in-app only — not a system alarm).`);
+        lines.push(`✓ ${step.text} — reminder stored in-app (not a system alarm)`);
+      } else if (low.includes('note')) {
+        deps.addNote(task.title);
+        store.setStep(task.id, i, 'done', 'Note stored in-app memory.');
+        lines.push(`✓ ${step.text} — note stored`);
+      } else {
+        store.setStep(task.id, i, 'done', 'Plan step reviewed — planning only, no system action.');
+        lines.push(`○ ${step.text} — planning only, no system action`);
+      }
+    } catch (e) {
+      failed = true;
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      store.setStep(task.id, i, 'failed', msg);
+      lines.push(`✗ ${step.text} — FAILED: ${msg}`);
+    }
+  }
+  store.setTask(task.id, failed ? 'failed' : 'done', failed ? 'Plan finished with failures — see per-step report.' : 'Plan executed and verified (file/research steps verified; planning steps labelled as such).');
+  return { report: lines.join('\n'), failed };
+}
+
 export const DESTRUCTIVE_ACTIONS = ['delete', 'send', 'publish'] as const;
 export function needsConfirmation(action: string): boolean {
   return DESTRUCTIVE_ACTIONS.some((d) => action.toLowerCase().includes(d));

@@ -23,7 +23,7 @@ export interface AiSettings {
   apiKey: string; // held in memory + on-device Preferences only; never in source
 }
 
-export interface ChatMessage { role: 'user' | 'rocky'; text: string; at: number; mode: AiMode }
+export interface ChatMessage { role: 'user' | 'rocky'; text: string; at: number; mode: AiMode; provider?: string; model?: string; latencyMs?: number }
 export interface UserProfile { name: string; language: string; notes: string }
 export const DEFAULT_PROFILE: UserProfile = { name: '', language: 'auto', notes: '' };
 

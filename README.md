@@ -199,3 +199,129 @@ those exact defects in the same repo and pipeline:
   rendering, intro timing, mic flow, recognition ar-DZ/fr/en, TTS voice
   quality, icon on a home screen, back button on a real phone. Code and
   CI tests pass; device behaviour must be confirmed on the user's phone.
+
+## v3 — real free multi-model engine (2026-10-24)
+
+Same repo, same pipeline, face/intro kept. New module `src/rocky/providers.ts`:
+
+- **Provider registry with a strict status vocabulary** shown in the UI:
+  DISCOVERED / DOCUMENTED / TESTED / INTEGRATED. A provider is never shown
+  as WORKING without a successful real test — the in-app Test button
+  actually calls the provider and shows latency + output or the error.
+- **Modes:** Smart Auto (fastest healthy provider for short questions,
+  reasoning-capable provider for long/complex ones), Fast, Deep Reasoning,
+  Offline (local tools only). Compare mode asks up to 2 providers, shows
+  each answer separately, then a synthesis assembled locally from those
+  answers (not a third model call).
+- **Failover:** at most 3 attempts per request (primary + 2 fallbacks),
+  no infinite retries, no duplicate calls. Health is persisted on-device
+  (last test, latency, successes, errors, last error); 3 consecutive
+  failures auto-disable a provider with a visible banner. Timeouts: 30 s.
+  Empty/invalid replies count as failures and fail over — never shown
+  as a successful empty answer.
+- **Settings are functional:** Discover providers + models (live models
+  endpoint where the API allows it), Connect/Disconnect, Test connection +
+  test prompt, preferred model or Smart Auto, fallback order (up/down),
+  enable/disable, keys stored only in Capacitor Preferences (masked in
+  the UI, never in source/bundle/GitHub), setup instructions per provider.
+- **Privacy:** "Include my name/notes in cloud model requests" defaults
+  OFF for cloud providers (ON for on-device local tools only). Keyless
+  public endpoints carry a NOT PRIVATE warning.
+- **Task execution, Plan → Execute → Verify → Report:** file steps
+  create the file and verify it by read-back; research steps actually
+  call DuckDuckGo Instant Answer (Wikipedia action API fallback) and
+  verify a summary + source came back; note/reminder steps store
+  in-app (reminders are in-app only — NOT system alarms, no
+  notifications plugin in v3); generic planning steps are labelled
+  "planning only, no system action". http(s) links can be opened;
+  calls/SMS/WhatsApp/email/purchases/phone photos/contacts are
+  UNSUPPORTED and never marked done. Sensitive actions still need
+  confirmation.
+- **Voice flow kept and checked:** mic → recognition → engine (or
+  honest local fallback) → spoken response; sending text or tapping
+  Stop/mic interrupts current speech. Face, intro, SFX from v2 are
+  unchanged.
+
+### Provider research table (2026-10-24, sources + status)
+
+| Provider | Access | Status in v3 | Free limits (as documented, not measured) | Signup |
+|---|---|---|---|---|
+| Pollinations | Keyless | INTEGRATED | No key, anonymous tier, rate-limited, numbers not published; may change/disappear | None |
+| OpenRouter (:free) | Your free key | DOCUMENTED (discovery TESTED) | ~20 req/min, ~50 req/day (1000/day after a $10 credit purchase — paid, optional) | openrouter.ai/keys |
+| Google Gemini (AI Studio) | Your free key | DOCUMENTED | Free tier on Flash/Flash-Lite, limits in AI Studio, vary by model/account; free-tier content may train Google products | aistudio.google.com |
+| Groq | Your free key | DOCUMENTED | Rate-limited; per-model limits in console / x-ratelimit-* headers | console.groq.com/keys |
+| Mistral | Your free key | DOCUMENTED | Experiment tier, limits in admin console, exact numbers unpublished; SMS verification required | console.mistral.ai |
+| Cloudflare Workers AI | Your free key + Account ID | DOCUMENTED | ~10,000 Neurons/day, resets 00:00 UTC, hard stop | dash.cloudflare.com |
+| SambaNova Cloud | Your free key | DOCUMENTED | Rate-limited; secondary sources quote ~20 req/min, ~20 req/day/model | cloud.sambanova.ai |
+| Local tools | On-device | INTEGRATED | No quota, no model | None |
+| LLM7.io | — | NOT INTEGRATED | Discovery returned 67 models, but chat test failed: 401 "Missing API key" for a listed model, 400 "model unavailable" for a guessed id. Not keyless in practice. Usable only if the user adds it as a custom OpenAI-compatible endpoint with their own key. | — |
+| GitHub Models | — | NOT INTEGRATED | Retired 2026-07-30 per GitHub docs (reported in secondary sources). Do not use. | — |
+
+Directories inspected (READMEs fetched 2026-10-24): pacocartones/free-llm-api-hub
+(maintained, dated, sourced dataset; 45 text providers), surendranb/free-inference
+(2026-10-24, 36 providers, 108 free models — source of several rows above),
+golapkamal/awesome-free-llm-apis (490+ free LLM APIs from 31 providers,
+daily-refreshed via freellm.net). No code from any of these repos was
+executed or installed; only their documentation was read. Conflicts found:
+model ids differ between directories (Gemini 2.5 vs 3.x generations;
+Groq model lists rotate) — that is why ROCKY discovers models live and
+lets the user edit the model id instead of trusting a static list.
+
+### Real test evidence (2026-10-24, build VM, no keys, no personal data)
+
+- Pollinations GET `text.pollinations.ai/<prompt>`: "17+25, number only"
+  → `42`, HTTP 200, 1.2 s; re-test "9+10" → `19`, HTTP 200, 5.8 s.
+  Models endpoint: HTTP 200, exactly 1 model: `openai-fast`.
+- OpenRouter models `openrouter.ai/api/v1/models`: HTTP 200, 17 `:free`
+  model ids (recursive/flint-v1.0:free, google/gemma-4-31b-it:free,
+  google/gemma-4-26b-a4b-it:free, cohere/north-mini-code:free,
+  nvidia/nemotron-3-*:free, …). Chat NOT tested — needs a key.
+- LLM7 models: HTTP 200, 67 ids; chat: 401 missing API key (listed
+  model), 400 model unavailable (guessed id). NOT wired as keyless.
+- DuckDuckGo Instant Answer: HTTP 202 with a real Abstract for
+  "Algiers" (capital of Algeria). Wikipedia REST summary: 403 without a
+  UA; Wikipedia action API with a UA: HTTP 200 with a real extract.
+  Research tool uses DuckDuckGo first, Wikipedia action API second.
+- Pollinations POST: NOT re-tested in v3 (already unreliable in v2) —
+  not wired.
+- Groq / Gemini / Mistral / Cloudflare / SambaNova chat: NOT tested —
+  no key exists in this project. They stay DOCUMENTED until a keyed
+  in-app Test passes.
+
+### Local on-device LLMs — why none is shipped
+
+WebLLM/WebGPU in an Android WebView is not a practical default for this
+app: even a 1–2B model needs ~0.8–1.4 GB of weights (3B ≈ 2.5 GB, 7B ≈
+5 GB per secondary sources), a multi-GB first download, WebGPU support
+that is not guaranteed in every Android WebView, and shared mobile GPU
+memory typically capped at 1–3 GB. Shipping one would make the APK
+huge, slow, and unreliable on the user's phone. v3 therefore keeps the
+honest local-tools assistant and cloud free tiers instead of a fake
+"local model". Speech stays on device Web Speech services
+(vendor-dependent) — no free cloud STT/TTS key is bundled.
+
+### Screenshot attempt (v3) — FAILED, no screenshot delivered
+
+Attempted a real headless capture of the built web bundle with the
+Chromium binary at /opt/meta-chromium/chrome (Chromium 152):
+`--headless` / `--headless=new`, SwiftShader, 390×844, local static
+server on 127.0.0.1:8124, and a trivial test page. Result: the binary
+exits 0 but writes NO screenshot file, even for the trivial page, with
+no screenshot error in its log; with `--user-data-dir` it hangs until
+the 30 s timeout, still with no file. No screenshot, video, or mockup
+is delivered for v3. Device screenshots must come from the user's
+phone. This does not affect the APK build, which is verified below.
+
+### Honest limits — v3 (read before judging)
+
+- Algeria access to every cloud provider is NOT verified from Algeria
+  (all network tests ran from the build VM) — confirm on the phone.
+- Keyed providers are DOCUMENTED, not TESTED, until the user adds a
+  free key and taps Test in Settings. No unlimited free access is
+  claimed anywhere; every free tier has limits (see table).
+- Speaking mouth motion is still envelope-driven, not raw-audio
+  lip-sync (Web Speech TTS exposes no audio stream).
+- Reminders are in-app only, not system alarms/notifications.
+- NOT device-tested (no emulator/phone here): launch, face, intro,
+  mic flow, recognition ar-DZ/fr/en, TTS quality, icon, back button,
+  and every in-app provider Test/Discover call on a real phone.

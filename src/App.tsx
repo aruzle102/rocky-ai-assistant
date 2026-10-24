@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RockyHologram, type RockyState } from './rocky/hologram';
 import { RockyAudio, LANG_OPTIONS, type LangCode } from './rocky/audio';
-import { localReply, connectedReply, freeReply, planTask, parseLocalCommand, type AiSettings, type ChatMessage, type UserProfile, type ReplyLang, TTS_LANG, DEFAULT_PROFILE } from './rocky/brain';
-import { TaskStore, needsConfirmation, isUnsupportedAction } from './rocky/tasks';
+import { localReply, planTask, parseLocalCommand, type AiSettings, type ChatMessage, type UserProfile, type ReplyLang, TTS_LANG, DEFAULT_PROFILE } from './rocky/brain';
+import { TaskStore, needsConfirmation, isUnsupportedAction, executePlan, loadReminders, saveReminders, type Reminder } from './rocky/tasks';
+import { PROVIDERS, defaultProviderStates, providerDef, runEngine, runCompare, testProvider, discoverModels, researchWeb, classifyOpenTarget, type ProviderState, type EngineMode, type ResearchResult } from './rocky/providers';
 import { RockySfx } from './rocky/sfx';
 import { Preferences } from '@capacitor/preferences';
 import { App as CapApp } from '@capacitor/app';
@@ -55,6 +56,30 @@ export default function App() {
   const [lowQuality, setLowQuality] = useState(() => loadLocal('rocky-lowq', false));
   const [profile, setProfile] = useState<UserProfile>(() => loadLocal('rocky-profile', DEFAULT_PROFILE));
   const [ai, setAi] = useState<AiSettings>({ mode: 'local', baseUrl: '', model: '', apiKey: '' });
+  // --- v3 multi-model engine state (keys live in Preferences, never here) ---
+  const [engineMode, setEngineMode] = useState<EngineMode>(() => loadLocal('rocky-engine-mode', 'smart'));
+  const [providerStates, setProviderStates] = useState<ProviderState[]>(() => {
+    const stored = loadLocal<ProviderState[] | null>('rocky-providers-v3', null);
+    const defaults = defaultProviderStates();
+    if (!stored) return defaults;
+    return defaults.map((d) => { const s = stored.find((x) => x.id === d.id); return s ? { ...d, ...s, id: d.id } : d; });
+  });
+  const [fallbackOrder, setFallbackOrder] = useState<string[]>(() => loadLocal('rocky-fallback-order', PROVIDERS.map((x) => x.id)));
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>({});
+  const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+  const [providerTest, setProviderTest] = useState<Record<string, string>>({});
+  const [discovering, setDiscovering] = useState(false);
+  const [compareMode, setCompareMode] = useState(() => loadLocal('rocky-compare', false));
+  const [includeMemoryCloud, setIncludeMemoryCloud] = useState(() => loadLocal('rocky-memory-cloud', false));
+  const [providerBanner, setProviderBanner] = useState('');
+  const [reminders, setReminders] = useState<Reminder[]>(() => loadReminders());
+  const [reminderText, setReminderText] = useState('');
+  const [reminderDue, setReminderDue] = useState('');
+  const [researchQuery, setResearchQuery] = useState('');
+  const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
+  const [researchError, setResearchError] = useState('');
+  const [openTarget, setOpenTarget] = useState('');
+  const [openResult, setOpenResult] = useState('');
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceName, setVoiceName] = useState(() => loadLocal('rocky-voice', ''));
   const [fileName, setFileName] = useState('notes.txt');
@@ -71,7 +96,8 @@ export default function App() {
   const abortRef = useRef<AbortController | null>(null);
 
   const t = (k: UIKey) => UI[replyLang][k];
-  const modeLabel = ai.mode === 'connected' && ai.apiKey ? 'CONNECTED (YOUR ENDPOINT)' : ai.mode === 'free' ? 'FREE PUBLIC ENDPOINT — NO KEY, NOT PRIVATE' : 'LOCAL ASSISTANT — LIMITED, NO CLOUD MODEL';
+  const enabledProviders = providerStates.filter((s) => s.enabled && !s.autoDisabled).length;
+  const modeLabel = engineMode === 'offline' ? 'OFFLINE — LOCAL TOOLS ONLY' : engineMode === 'smart' ? `SMART AUTO — MULTI-MODEL (${enabledProviders} ENABLED)` : engineMode === 'fast' ? 'FAST MODE — MULTI-MODEL' : 'DEEP REASONING — MULTI-MODEL';
   const files = store.listFiles();
   void filesTick;
 
@@ -115,6 +141,9 @@ export default function App() {
     Preferences.get({ key: 'rocky-ai-settings' }).then(({ value }) => {
       if (value) { try { const parsed = JSON.parse(value); if (parsed.mode === 'offline') parsed.mode = 'local'; setAi(parsed); } catch { /* ignore */ } }
     }).catch(() => undefined);
+    Preferences.get({ key: 'rocky-provider-keys' }).then(({ value }) => {
+      if (value) { try { setProviderKeys(JSON.parse(value)); } catch { /* ignore */ } }
+    }).catch(() => undefined);
     if (store.resumeInterrupted() > 0) setFilesTick((v) => v + 1);
     void audio.listVoices().then(setVoices).catch(() => undefined);
     // Android back button: close drawer first (via ref, not the stale initial
@@ -138,6 +167,12 @@ export default function App() {
   useEffect(() => { localStorage.setItem('rocky-chat-v1', JSON.stringify(messages.slice(-100))); }, [messages]);
   useEffect(() => { localStorage.setItem('rocky-profile', JSON.stringify(profile)); }, [profile]);
   useEffect(() => { localStorage.setItem('rocky-reply-lang', JSON.stringify(replyLang)); }, [replyLang]);
+  useEffect(() => { localStorage.setItem('rocky-engine-mode', JSON.stringify(engineMode)); }, [engineMode]);
+  useEffect(() => { localStorage.setItem('rocky-providers-v3', JSON.stringify(providerStates)); }, [providerStates]);
+  useEffect(() => { localStorage.setItem('rocky-fallback-order', JSON.stringify(fallbackOrder)); }, [fallbackOrder]);
+  useEffect(() => { localStorage.setItem('rocky-compare', JSON.stringify(compareMode)); }, [compareMode]);
+  useEffect(() => { localStorage.setItem('rocky-memory-cloud', JSON.stringify(includeMemoryCloud)); }, [includeMemoryCloud]);
+  useEffect(() => { saveReminders(reminders); }, [reminders]);
   useEffect(() => { localStorage.setItem('rocky-voice', JSON.stringify(voiceName)); }, [voiceName]);
 
   // amplitude loop: real mic RMS while listening, TTS envelope while speaking
@@ -167,32 +202,79 @@ export default function App() {
 
   const pushRocky = (text: string, mode: AiSettings['mode']) => setMessages((m) => [...m, { role: 'rocky', text, at: Date.now(), mode }]);
 
-  const runPlan = (taskId: string) => {
+  const saveProviderKeys = async (keys: Record<string, string>) => {
+    setProviderKeys(keys);
+    await Preferences.set({ key: 'rocky-provider-keys', value: JSON.stringify(keys) }).catch(() => undefined);
+  };
+  const doTestProvider = async (id: string) => {
+    const def = providerDef(id);
+    const st = providerStates.find((s) => s.id === id)!;
+    setProviderTest((m) => ({ ...m, [id]: 'Testing — real call in progress…' }));
+    const res = await testProvider(def, st.model, providerKeys[id] || '');
+    setProviderStates((prev) => prev.map((s) => s.id === id ? { ...s, lastTestAt: Date.now(), lastLatencyMs: res.latencyMs, successes: res.ok ? s.successes + 1 : s.successes, errors: res.ok ? s.errors : s.errors + 1, consecutiveFailures: res.ok ? 0 : s.consecutiveFailures + 1, autoDisabled: res.ok ? false : (s.consecutiveFailures + 1 >= 3), lastError: res.error, tested: res.ok ? true : s.tested } : s));
+    if (res.ok) { setProviderBanner(''); setProviderTest((m) => ({ ...m, [id]: `✓ WORKING — ${res.latencyMs}ms — "${res.output.slice(0, 120)}"` })); sfx.success(); }
+    else { setProviderTest((m) => ({ ...m, [id]: `✗ FAILED — ${res.latencyMs}ms — ${res.error}` })); sfx.error(); }
+  };
+  const doDiscover = async (id: string) => {
+    const def = providerDef(id);
+    setProviderTest((m) => ({ ...m, [id]: 'Discovering models…' }));
+    try {
+      const models = await discoverModels(def, providerKeys[id] || '');
+      setProviderStates((prev) => prev.map((s) => s.id === id ? { ...s, models, tested: true } : s));
+      setProviderTest((m) => ({ ...m, [id]: `✓ Discovered ${models.length} model(s): ${models.slice(0, 5).join(', ')}${models.length > 5 ? '…' : ''}` }));
+    } catch (e: any) { setProviderTest((m) => ({ ...m, [id]: `✗ Discovery failed: ${e?.message || 'unknown'}` })); }
+  };
+  const doDiscoverAll = async () => {
+    setDiscovering(true);
+    for (const def of PROVIDERS) {
+      if (def.id === 'local') continue;
+      if (def.access === 'user-key' && !providerKeys[def.id] && !def.discoverableWithoutKey) { setProviderTest((m) => ({ ...m, [def.id]: 'Skipped — needs a key first.' })); continue; }
+      await doDiscover(def.id);
+    }
+    setDiscovering(false);
+  };
+  const moveFallback = (id: string, dir: -1 | 1) => {
+    setFallbackOrder((prev) => {
+      const i = prev.indexOf(id); const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev]; [next[i], next[j]] = [next[j], next[i]]; return next;
+    });
+  };
+  const doResearch = async () => {
+    setResearchError(''); setResearchResult(null);
+    try { const r = await researchWeb(researchQuery); setResearchResult(r); sfx.success(); }
+    catch (e: any) { setResearchError(e?.message || 'Research failed.'); sfx.error(); }
+  };
+  const doOpenLink = () => {
+    const c = classifyOpenTarget(openTarget);
+    if (!c.supported) { setOpenResult(`UNSUPPORTED: ${c.detail}`); sfx.error(); return; }
+    try { window.open(openTarget.trim(), '_blank'); } catch { /* ignore */ }
+    setOpenResult(`Link opened (or offered to your browser): ${openTarget.trim()} — if your device blocked it, the URL above is the result to use.`);
+    sfx.tap();
+  };
+  const runPlan = async (taskId: string) => {
     const task = store.tasks.find((x) => x.id === taskId);
     if (!task || !task.steps) return;
     sfx.tap();
     setState('EXECUTING');
-    store.setTask(taskId, 'running', 'Executing steps…');
-    let failed = false;
-    task.steps.forEach((step, i) => {
-      if (step.text.startsWith('Create the first file')) {
-        const goal = task.title.replace(/^plan:?\s*/i, '');
-        const slug = goal.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'plan';
-        try {
-          const file = store.createFile(`${slug}.txt`, `# ${goal}\n\nDraft created by ROCKY from the plan "${task.title}".\n\nSteps:\n${task.steps!.map((s, j) => `${j + 1}. ${s.text}`).join('\n')}\n`);
-          store.setStep(taskId, i, 'done', `Created real file ${file.name} in the app store.`);
-        } catch {
-          failed = true;
-          store.setStep(taskId, i, 'failed', 'File creation failed.');
-        }
-      } else {
-        store.setStep(taskId, i, 'done', 'Plan step reviewed — planning only, no system action.');
-      }
-    });
-    store.setTask(taskId, failed ? 'failed' : 'done', failed ? 'Plan failed on a file step.' : 'Plan executed: file step created a real file; other steps are plan items.');
-    setFilesTick((v) => v + 1);
-    if (failed) { sfx.error(); setState('ERROR'); setTimeout(() => setState('IDLE'), 2000); }
-    else { sfx.success(); const msg = PLAN_DONE[replyLang]; pushRocky(msg, ai.mode); speak(msg); }
+    try {
+      const { report, failed } = await executePlan(task, store, {
+        createFile: (n, c) => store.createFile(n, c),
+        listFiles: () => store.listFiles(),
+        research: (q) => researchWeb(q),
+        addReminder: (text, due) => { const r: Reminder = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text, dueAt: due, done: false, createdAt: Date.now() }; setReminders((prev) => [r, ...prev]); return r; },
+        addNote: (note) => setProfile((pr) => ({ ...pr, notes: pr.notes ? `${pr.notes}
+- ${note}` : `- ${note}` })),
+      });
+      setFilesTick((v) => v + 1);
+      pushRocky(`Plan → Execute → Verify → Report:
+${report}`, 'local');
+      if (failed) { sfx.error(); setState('ERROR'); setTimeout(() => setState('IDLE'), 2500); }
+      else { sfx.success(); speak(PLAN_DONE[replyLang]); }
+    } catch (e: any) {
+      sfx.error(); setState('ERROR'); setTimeout(() => setState('IDLE'), 2500);
+      pushRocky(`Plan execution failed: ${e?.message || 'unknown'}. Nothing was marked done without verification.`, 'local');
+    }
   };
 
   const send = useCallback(async (text: string) => {
@@ -202,6 +284,7 @@ export default function App() {
     setMessages((m) => [...m, userMsg]);
     setInput('');
     sfx.tap();
+    audio.stopSpeaking(); // sending text interrupts any current speech
 
     const unsupported = isUnsupportedAction(clean);
     if (unsupported) {
@@ -233,60 +316,49 @@ export default function App() {
       pushRocky(r, ai.mode); sfx.success(); speak(r); return;
     }
 
-    if (ai.mode === 'local') {
+    if (engineMode === 'offline') {
       const reply = localReply(clean, profile, new Date(), replyLang);
       pushRocky(reply, 'local');
       speak(reply);
       return;
     }
-    if (ai.mode === 'free') {
-      setState('THINKING'); setIsThinking(true);
-      abortRef.current = new AbortController();
-      try {
-        const reply = await freeReply([...messages, userMsg], abortRef.current.signal, replyLang);
-        pushRocky(reply, 'free');
-        speak(reply);
-      } catch (e: any) {
-        const fallback = localReply(clean, profile, new Date(), replyLang);
-        const msg = e?.name === 'AbortError' ? 'Cancelled.' : `Free endpoint failed: ${e?.message || 'unknown'}. Falling back to local tools: ${fallback}`;
-        pushRocky(msg, 'free');
-        setState('ERROR'); sfx.error(); setTimeout(() => setState('IDLE'), 2500);
-      } finally { setIsThinking(false); }
-      return;
-    }
-    // connected
-    const connected = ai.mode === 'connected' && !!ai.apiKey && !!ai.baseUrl && !!ai.model;
-    if (!connected) {
-      const msg = 'Connected mode needs a base URL, model and key in Settings. Your key stays on this device only. Falling back to local tools.';
-      pushRocky(msg, 'connected');
-      speak(localReply(clean, profile, new Date(), replyLang));
-      return;
-    }
     setState('THINKING'); setIsThinking(true);
     abortRef.current = new AbortController();
+    const langName = replyLang === 'fr' ? 'French' : replyLang === 'ar' ? 'Arabic' : 'English';
+    const memoryText = includeMemoryCloud && (profile.name || profile.notes)
+      ? ` User memory (the user explicitly allowed this in cloud requests): name=${profile.name}; notes=${profile.notes}.`
+      : '';
+    const engineMessages = [
+      { role: 'system', content: `You are ROCKY, a calm, confident, direct masculine AI assistant. Answer concisely in ${langName}.${memoryText}` },
+      ...[...messages, userMsg].slice(-20).map((m) => ({ role: m.role === 'rocky' ? 'assistant' : 'user', content: m.text })),
+    ];
     try {
-      let streamed = '';
-      const full = await connectedReply([...messages, userMsg], ai, abortRef.current.signal, (tok) => {
-        streamed += tok;
-        setMessages((m) => {
-          const last = m[m.length - 1];
-          if (last?.role === 'rocky' && last.text === streamed.slice(0, -tok.length)) return [...m.slice(0, -1), { ...last, text: streamed }];
-          return [...m, { role: 'rocky', text: streamed, at: Date.now(), mode: 'connected' }];
-        });
-      });
-      const finalText = full || streamed;
-      setMessages((m) => {
-        const last = m[m.length - 1];
-        return last?.role === 'rocky' ? [...m.slice(0, -1), { ...last, text: finalText }] : [...m, { role: 'rocky', text: finalText, at: Date.now(), mode: 'connected' }];
-      });
-      speak(finalText);
+      if (compareMode) {
+        const res = await runCompare({ mode: engineMode, fallbackOrder, states: providerStates, keys: providerKeys, messages: engineMessages, signal: abortRef.current.signal });
+        setProviderStates(res.states);
+        const combined = `Compare mode — each model's answer (the synthesis below is assembled locally from these answers, not a third model call):\n\n${res.compareAnswers!.map((a) => `— ${providerDef(a.providerId).name} (${a.model}, ${a.latencyMs}ms):\n${a.text}`).join('\n\n')}`;
+        setMessages((m) => [...m, { role: 'rocky', text: combined, at: Date.now(), mode: 'connected', provider: res.providerId, model: res.model, latencyMs: res.latencyMs }]);
+        speak(res.compareAnswers![0].text);
+      } else {
+        const res = await runEngine({ mode: engineMode, fallbackOrder, states: providerStates, keys: providerKeys, messages: engineMessages, signal: abortRef.current.signal });
+        const wasEnabled = providerStates.find((x) => x.id === res.providerId);
+        setProviderStates(res.states);
+        const auto = res.states.find((x) => x.autoDisabled && wasEnabled && !wasEnabled.autoDisabled);
+        if (auto) setProviderBanner(`${providerDef(auto.id).name} was auto-disabled after 3 consecutive failures. Fix its key/model in Settings, then re-enable it.`);
+        setMessages((m) => [...m, { role: 'rocky', text: res.text, at: Date.now(), mode: res.providerId === 'pollinations' ? 'free' : 'connected', provider: res.providerId, model: res.model, latencyMs: res.latencyMs }]);
+        speak(res.text);
+      }
     } catch (e: any) {
-      const msg = e?.name === 'AbortError' ? 'Cancelled.' : `Model error: ${e?.message || 'unknown'}. Check Settings — your key stays on this device only.`;
-      setState('ERROR');
-      pushRocky(msg, 'connected');
-      setTimeout(() => setState('IDLE'), 2000);
+      const errStates = (e as any).states as ProviderState[] | undefined;
+      if (errStates) setProviderStates(errStates);
+      const attempts = (e as any).attempts as { providerId: string; error: string }[] | undefined;
+      const attemptText = attempts ? attempts.map((a) => `${a.providerId}: ${a.error}`).join(' | ') : (e?.message || 'unknown');
+      const fallback = localReply(clean, profile, new Date(), replyLang);
+      const msg = e?.name === 'AbortError' ? 'Cancelled.' : `All enabled providers failed: ${attemptText}. Honest fallback from local tools (NOT a model answer): ${fallback}`;
+      pushRocky(msg, 'local');
+      speak(fallback);
     } finally { setIsThinking(false); }
-  }, [ai, messages, profile, replyLang, speak]);
+  }, [ai, messages, profile, replyLang, speak, engineMode, fallbackOrder, providerStates, providerKeys, compareMode, includeMemoryCloud]);
 
   const toggleMic = async () => {
     if (listening) { audio.stopRecognition(); audio.stopMic(); setListening(false); setState('IDLE'); return; }
@@ -347,7 +419,7 @@ export default function App() {
         </div>
       </header>
       <div className="modebar">
-        Mode: <b className={ai.mode === 'local' ? 'offline' : ai.mode === 'free' ? 'free' : 'connected'}>{modeLabel}</b>
+        Mode: <b className={engineMode === 'offline' ? 'offline' : 'connected'}>{modeLabel}</b>
         <span style={{ marginLeft: 'auto' }}><span className={`pill ${state === 'ERROR' ? 'ERROR' : ''}`}>{state}</span></span>
       </div>
       <div className="stage" ref={stageRef} onPointerMove={onStagePointer}>
@@ -369,7 +441,7 @@ export default function App() {
         {messages.length === 0 && <div className="msg rocky"><div className="meta">ROCKY · {ai.mode.toUpperCase()}</div>{emptyGreeting}</div>}
         {messages.map((m, i) => (
           <div key={i} className={`msg ${m.role === 'user' ? 'user' : 'rocky'}`}>
-            <div className="meta">{m.role === 'user' ? 'YOU' : `ROCKY · ${m.mode.toUpperCase()}`}</div>{m.text}
+            <div className="meta">{m.role === 'user' ? 'YOU' : `ROCKY · ${m.mode.toUpperCase()}${m.provider ? ` · ${m.provider}${m.model ? `/${m.model}` : ''}${m.latencyMs != null ? ` · ${m.latencyMs}ms` : ''}` : ''}`}</div>{m.text}
           </div>
         ))}
         {isThinking && <div className="msg rocky thinking"><div className="meta">ROCKY</div>{t('thinking')}</div>}
@@ -424,27 +496,69 @@ export default function App() {
           <textarea rows={3} value={profile.notes} onChange={(e) => setProfile({ ...profile, notes: e.target.value })} placeholder="Things ROCKY should remember…" />
 
           <hr style={{ borderColor: '#1e3a5f' }} />
-          <b>{t('aiProvider')}</b>
+          <b>{t('aiProvider')} — Multi-model engine (v3)</b>
+          <p style={{ fontSize: 13, opacity: 0.85 }}>Smart Auto picks the fastest healthy provider for short questions and a reasoning-capable provider for long/complex ones. Fast prefers speed; Deep Reasoning prefers reasoning models; Offline uses local tools only. Failover tries at most 3 providers per request (primary + 2 fallbacks) — never infinite retries. A provider is only shown as WORKING after a real test call succeeds.</p>
           <div className="row seg" style={{ marginTop: 8 }}>
-            <button className={ai.mode === 'local' ? '' : 'secondary'} onClick={() => setAi({ ...ai, mode: 'local' })}>Local</button>
-            <button className={ai.mode === 'free' ? '' : 'secondary'} onClick={() => setAi({ ...ai, mode: 'free' })}>Free public</button>
-            <button className={ai.mode === 'connected' ? '' : 'secondary'} onClick={() => setAi({ ...ai, mode: 'connected' })}>Connected</button>
+            <button className={engineMode === 'smart' ? '' : 'secondary'} onClick={() => setEngineMode('smart')}>Smart Auto</button>
+            <button className={engineMode === 'fast' ? '' : 'secondary'} onClick={() => setEngineMode('fast')}>Fast</button>
+            <button className={engineMode === 'deep' ? '' : 'secondary'} onClick={() => setEngineMode('deep')}>Deep Reasoning</button>
+            <button className={engineMode === 'offline' ? '' : 'secondary'} onClick={() => setEngineMode('offline')}>Offline</button>
           </div>
-          {ai.mode === 'local' && <p style={{ fontSize: 13, opacity: 0.8 }}>Local assistant — limited, no cloud model. Time, calculations, conversions, city times, memory, plans and files. It never pretends to be a model.</p>}
-          {ai.mode === 'free' && <p style={{ fontSize: 13, color: '#fbbf24' }}>⚠️ Free public endpoint (Pollinations, no key): your prompt is sent in a URL to a public service. It is NOT private, it is rate-limited, and it may change or go down. Do not send sensitive information in this mode. Verified working from the build environment on 2026-10-24 (GET, HTTP 200, real answers), but on-device behaviour still needs a phone test.</p>}
-          {ai.mode === 'connected' && <p style={{ fontSize: 13, opacity: 0.8 }}>Your key is stored only in this app on this phone. It is never bundled into the app, never committed to GitHub, never logged. Free-key options that need a key you obtain yourself (not bundled): OpenRouter free models, Groq free tier, Google AI Studio free tier — none were tested with a key here because no key exists in this project.</p>}
+          <div className="row" style={{ marginTop: 8 }}>
+            <label style={{ margin: 0 }}><input type="checkbox" checked={compareMode} onChange={(e) => setCompareMode(e.target.checked)} /> Compare mode (ask up to 2 providers, show each answer separately)</label>
+          </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <label style={{ margin: 0 }}><input type="checkbox" checked={includeMemoryCloud} onChange={(e) => setIncludeMemoryCloud(e.target.checked)} /> Include my name/notes in cloud model requests (OFF by default for cloud; local tools always use on-device memory)</label>
+          </div>
+          {providerBanner && <div className="notice" style={{ padding: '8px 0' }}>{providerBanner}</div>}
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="secondary" onClick={() => void doDiscoverAll()} disabled={discovering}>{discovering ? 'Discovering…' : 'Discover providers + models'}</button>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>Discovery calls the live models endpoint where the API allows it. Keyed providers without a key are skipped.</span>
+          </div>
+          <p style={{ fontSize: 12, opacity: 0.7 }}>Fallback order (top = tried first). Keys are stored only in this app on this phone (Capacitor Preferences), masked in the UI, never in the app bundle or GitHub. Algeria access was NOT verified from Algeria — confirm on your phone.</p>
+          {fallbackOrder.map((pid) => {
+            const def = providerDef(pid);
+            const st = providerStates.find((x) => x.id === pid)!;
+            if (!st) return null;
+            return (
+              <div className="file" key={pid}>
+                <div className="row"><b>{def.name}</b><span style={{ fontSize: 11, marginLeft: 6 }}>{def.access === 'keyless' ? 'NO KEY' : def.access === 'local' ? 'ON-DEVICE' : 'YOUR KEY'} · {def.status}{st.tested ? ' · TESTED ✓' : ''}{st.autoDisabled ? ' · AUTO-DISABLED (3 failures)' : ''}</span><span style={{ marginLeft: 'auto', fontSize: 12 }}>{st.enabled && !st.autoDisabled ? 'ENABLED' : 'DISABLED'}</span></div>
+                <p style={{ fontSize: 12, opacity: 0.85, margin: '6px 0' }}>{def.note}</p>
+                <p style={{ fontSize: 12, opacity: 0.75, margin: '6px 0' }}>Free limits (as documented 2026-10-24): {def.freeLimits}</p>
+                <p style={{ fontSize: 12, opacity: 0.75, margin: '6px 0' }}>Setup: {def.setupSteps.join(' ')} {def.signupUrl ? `Get a key: ${def.signupUrl}` : ''}</p>
+                <div className="row" style={{ marginTop: 6 }}>
+                  <button className="secondary" onClick={() => setProviderStates((prev) => prev.map((x) => x.id === pid ? { ...x, enabled: !x.enabled, autoDisabled: false, consecutiveFailures: 0 } : x))}>{st.enabled ? 'Disable' : 'Enable'}</button>
+                  <button className="secondary" onClick={() => moveFallback(pid, -1)}>↑ Fallback</button>
+                  <button className="secondary" onClick={() => moveFallback(pid, 1)}>↓ Fallback</button>
+                  <button className="secondary" onClick={() => void doTestProvider(pid)}>Test connection + prompt</button>
+                  <button className="secondary" onClick={() => void doDiscover(pid)}>Discover models</button>
+                </div>
+                <label>Model {st.models.length ? '(discovered — pick one)' : '(type the exact model id)'}</label>
+                {st.models.length ? (
+                  <select value={st.model} onChange={(e) => setProviderStates((prev) => prev.map((x) => x.id === pid ? { ...x, model: e.target.value } : x))}>
+                    {st.models.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                ) : (
+                  <input value={st.model} onChange={(e) => setProviderStates((prev) => prev.map((x) => x.id === pid ? { ...x, model: e.target.value } : x))} placeholder="model id" />
+                )}
+                {def.access === 'user-key' && (<>
+                  <label>API key (on-device only, masked) — {providerKeys[pid] ? 'key saved on-device (••••)' : 'no key saved'}</label>
+                  <input type="password" value={keyDrafts[pid] || ''} onChange={(e) => setKeyDrafts((m) => ({ ...m, [pid]: e.target.value }))} placeholder="Paste key here, then Connect" />
+                  <div className="row" style={{ marginTop: 6 }}>
+                    <button className="secondary" onClick={() => { const k = (keyDrafts[pid] || '').trim(); if (!k) { setProviderTest((m) => ({ ...m, [pid]: 'Paste a key first.' })); return; } void saveProviderKeys({ ...providerKeys, [pid]: k }).then(() => { setKeyDrafts((m) => ({ ...m, [pid]: '' })); setProviderTest((m) => ({ ...m, [pid]: 'Key saved on-device (masked). Tap Test to verify it works.' })); }); }}>Connect (save key)</button>
+                    <button className="secondary" onClick={() => { const next = { ...providerKeys }; delete next[pid]; void saveProviderKeys(next).then(() => setProviderTest((m) => ({ ...m, [pid]: 'Disconnected — key removed from this device.' }))); }}>Disconnect (remove key)</button>
+                  </div>
+                </>)}
+                {def.access === 'keyless' && <p style={{ fontSize: 12, color: '#fbbf24' }}>⚠️ Not private: prompts go to a public endpoint. Do not send sensitive information.</p>}
+                <p style={{ fontSize: 12, opacity: 0.75 }}>Health: {st.lastTestAt ? `last test ${new Date(st.lastTestAt).toLocaleString()}, ${st.lastLatencyMs ?? '?'}ms` : 'never tested'} · ✓ {st.successes} · ✗ {st.errors}{st.lastError ? ` · last error: ${st.lastError}` : ''}</p>
+                {providerTest[pid] && <div className="file" style={{ margin: '6px 0' }}><pre>{providerTest[pid]}</pre></div>}
+              </div>
+            );
+          })}
           <label>Speech recognition language</label>
           <select value={lang} onChange={(e) => { const v = e.target.value as LangCode; setLang(v); localStorage.setItem('rocky-lang', JSON.stringify(v)); }}>
             {LANG_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
           </select>
-          {ai.mode === 'connected' && (<>
-            <label>Base URL</label>
-            <input value={ai.baseUrl} onChange={(e) => setAi({ ...ai, baseUrl: e.target.value })} placeholder="https://api.example.com/v1" />
-            <label>Model</label>
-            <input value={ai.model} onChange={(e) => setAi({ ...ai, model: e.target.value })} placeholder="e.g. gpt-4o-mini" />
-            <label>API key (on-device only)</label>
-            <input type="password" value={ai.apiKey} onChange={(e) => setAi({ ...ai, apiKey: e.target.value })} placeholder="••••••••" />
-          </>)}
 
           <hr style={{ borderColor: '#1e3a5f' }} />
           <b>{t('privacy')}</b>
@@ -471,6 +585,29 @@ export default function App() {
             <button onClick={() => { store.createFile(fileName, fileContent); setFilesTick((v) => v + 1); sfx.success(); }}>{t('createFile')}</button>
           </div>
           <p style={{ fontSize: 12, opacity: 0.7 }}>{t('unsupportedNote')}</p>
+          <hr style={{ borderColor: '#1e3a5f' }} />
+          <b>Web research (real tool)</b>
+          <label>Question</label>
+          <input value={researchQuery} onChange={(e) => setResearchQuery(e.target.value)} placeholder="e.g. What is the capital of Algeria?" />
+          <div className="row" style={{ marginTop: 8 }}><button onClick={() => void doResearch()}>Research the web</button></div>
+          {researchError && <div className="notice">{researchError}</div>}
+          {researchResult && (<div className="file"><b>Source: {researchResult.source}</b><pre>{researchResult.summary}</pre><div style={{ fontSize: 12, wordBreak: 'break-all' }}>{researchResult.url}</div><div className="row" style={{ marginTop: 8 }}><button onClick={() => { const slug = researchQuery.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'research'; const f = store.createFile(`research-${slug}.txt`, `Query: ${researchQuery}\nSource: ${researchResult.source}\nURL: ${researchResult.url}\n\n${researchResult.summary}\n`); const ok = store.listFiles().some((x) => x.name === f.name && x.content.includes(researchResult.summary.slice(0, 40))); setFilesTick((v) => v + 1); setResearchResult(null); setResearchQuery(''); pushRocky(ok ? `Research saved + verified as file ${f.name}.` : 'Research save verification failed — file not found after creation.', 'local'); }}>Save as file (verified)</button><button className="secondary" onClick={() => setResearchResult(null)}>Dismiss</button></div></div>)}
+          <hr style={{ borderColor: '#1e3a5f' }} />
+          <b>Reminders (in-app only — NOT system alarms)</b>
+          <p style={{ fontSize: 12, opacity: 0.7 }}>Reminders are stored in this app and shown here. They do NOT fire system notifications or alarms — that would need a notifications plugin and is not built in v3.</p>
+          <label>Reminder text</label>
+          <input value={reminderText} onChange={(e) => setReminderText(e.target.value)} placeholder="e.g. Call the supplier tomorrow" />
+          <label>Due (optional, defaults to +1 hour)</label>
+          <input type="datetime-local" value={reminderDue} onChange={(e) => setReminderDue(e.target.value)} />
+          <div className="row" style={{ marginTop: 8 }}><button onClick={() => { if (!reminderText.trim()) return; const due = reminderDue ? new Date(reminderDue).getTime() : Date.now() + 3600_000; const r: Reminder = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text: reminderText.trim(), dueAt: due, done: false, createdAt: Date.now() }; setReminders((prev) => [r, ...prev]); setReminderText(''); setReminderDue(''); sfx.success(); }}>Add reminder</button></div>
+          {reminders.map((r) => (<div className="file" key={r.id}><div className="row"><b>{r.done ? '✓ ' : '○ '}{r.text}</b><span style={{ marginLeft: 'auto', fontSize: 12 }}>due {new Date(r.dueAt).toLocaleString()}</span></div><div className="row" style={{ marginTop: 6 }}><button className="secondary" onClick={() => setReminders((prev) => prev.map((x) => x.id === r.id ? { ...x, done: !x.done } : x))}>{r.done ? 'Reopen' : 'Mark done'}</button></div></div>))}
+          <hr style={{ borderColor: '#1e3a5f' }} />
+          <b>Open a link</b>
+          <label>URL (http/https only)</label>
+          <input value={openTarget} onChange={(e) => setOpenTarget(e.target.value)} placeholder="https://example.com" />
+          <div className="row" style={{ marginTop: 8 }}><button onClick={doOpenLink}>Open link</button></div>
+          {openResult && <div className="file"><pre>{openResult}</pre></div>}
+
           {files.map((f) => (
             <div className="file" key={f.name}>
               <div className="row"><b>{f.name}</b><button className="danger" style={{ marginLeft: 'auto' }} onClick={() => { if (needsConfirmation('delete')) doDeleteFile(f.name); }}>Delete</button></div>
