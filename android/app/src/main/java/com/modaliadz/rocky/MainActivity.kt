@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
                     val slug = pendingPreviewSlug
                     pendingPreviewSlug = null
                     setState(RockyState.IDLE)
-                    startActivity(Intent(this, PreviewActivity::class.java).putExtra("slug", slug))
+                    startActivity(Intent(this@MainActivity, PreviewActivity::class.java).putExtra("slug", slug))
                 } else {
                     setState(RockyState.IDLE)
                 }

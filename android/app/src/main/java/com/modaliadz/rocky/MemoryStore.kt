@@ -145,16 +145,20 @@ class MemoryStore(context: Context) : FileStore, NoteStore {
         } catch (_: Exception) { null }
     }
 
-    override fun write(name: String, content: String): Boolean = try {
-        val f = safeFile(name) ?: return false
-        f.writeText(content)
-        true
-    } catch (_: Exception) { false }
+    override fun write(name: String, content: String): Boolean {
+        return try {
+            val f = safeFile(name) ?: return false
+            f.writeText(content)
+            true
+        } catch (_: Exception) { false }
+    }
 
-    override fun read(name: String): String? = try {
-        val f = safeFile(name) ?: return null
-        if (f.exists()) f.readText() else null
-    } catch (_: Exception) { null }
+    override fun read(name: String): String? {
+        return try {
+            val f = safeFile(name) ?: return null
+            if (f.exists()) f.readText() else null
+        } catch (_: Exception) { null }
+    }
 
     // --- NoteStore (in-app only; reminders are NOT system alarms) ---
     override fun addNote(text: String): Boolean {
