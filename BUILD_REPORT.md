@@ -105,3 +105,15 @@ Local verification before push: vitest 13/13, tsc + vite build pass
 - aapt (CI log): package: name='com.modaliadz.rocky' versionCode='1' versionName='1.0' compileSdkVersion='34'; application-label:'ROCKY AI'.
 - Local tests: vitest 13/13, tsc + vite build pass, dist secret-pattern scan clean.
 - Still NOT device-tested: launch, face rendering, intro, mic, recognition ar-DZ/fr/en, TTS quality, icon on home screen, back button.
+
+## v3 — REAL FREE MULTI-MODEL ENGINE (2026-10-24, verified)
+
+- **Code commit:** 60187be (providers.ts + engine wiring + verified tasks + 19 new tests + README research)
+- **Successful run:** https://github.com/aruzle102/rocky-ai-assistant/actions/runs/40138552895 (all steps passed, ~2m3s)
+- **APK:** 4,131,067 bytes, downloaded and verified locally: zip test clean (bad_file: None), 483 entries; CI aapt: package com.modaliadz.rocky v1.0, label ROCKY AI, SDK 34; v3 strings confirmed in bundle (Smart Auto, Failover, pollinations, OpenRouter, Deep Reasoning, Plan, Verify, DuckDuckGo, auto-disabled, Compare mode); CI secret scan clean.
+- **Tests:** vitest 32/32 (19 new providers/tasks tests + 13 existing) locally and in CI; tsc + vite build passed (703 KB JS).
+- **Provider tests (2026-10-24, VM, no keys, no personal data):** Pollinations GET 200 ("42" in 1.2 s; re-test "19" in 5.8 s), models endpoint 200 with exactly 1 model (openai-fast); OpenRouter models 200 with 17 :free ids; LLM7 models 200 (67 ids) but chat FAILED (401 missing API key for a listed model, 400 model unavailable for a guessed id) — NOT wired as keyless; DuckDuckGo Instant Answer real Abstract (HTTP 202); Wikipedia REST 403 without UA, action API 200 with UA.
+- **Failover test evidence (mocked fetch, in vitest):** provider 500 → second succeeds with exactly 2 attempts; 5 enabled providers failing → exactly 3 attempts (no infinite loop); 3 consecutive failures → auto-disabled and excluded from routing; Compare returns both answers separately before local synthesis.
+- **Screenshot attempt: FAILED, no screenshot delivered.** Chromium 152 at /opt/meta-chromium/chrome, headless + SwiftShader, 390×844, local server + trivial test page: exits 0 but writes NO screenshot file and no screenshot error in its log; with --user-data-dir it hangs to the 30 s timeout, still no file. No mockup substituted.
+- **NOT device-tested (no emulator/phone):** launch, face, intro, mic flow, recognition ar-DZ/fr/en, TTS quality, icon, back button, in-app provider Test/Discover on a real phone, and Algeria access to every cloud provider. Keyed providers (OpenRouter, Gemini, Groq, Mistral, Cloudflare, SambaNova) are DOCUMENTED, not TESTED, until the user adds a free key and taps Test.
+- **Still needs:** microphone permission on device; device speech services; a free key (user-obtained, stored on-device only) for any keyed provider; phone confirmation for Algeria access.
