@@ -51,7 +51,7 @@ class ProjectsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Select a project and a file first", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            if (tools.writeProjectFile(slug, file, fileViewer.text.toString())) {
+            if (tools.writeProjectFile(slug, file, fileViewer.text.toString(), "edit_file")) {
                 Toast.makeText(this, "Saved $file", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "Could not save $file", Toast.LENGTH_SHORT).show()
@@ -125,6 +125,12 @@ class ProjectsActivity : AppCompatActivity() {
                 logLines.add("Result: ${result.message}")
                 agentLog.text = logLines.takeLast(20).joinToString("\n")
                 refreshProjects()
+                // Website = files + validation + preview: on success the
+                // preview screen opens next; on failure the task stays
+                // reported INCOMPLETE in the log above.
+                if (result.success && result.projectSlug != null) {
+                    startActivity(Intent(this, PreviewActivity::class.java).putExtra("slug", result.projectSlug))
+                }
             }
         }.start()
     }

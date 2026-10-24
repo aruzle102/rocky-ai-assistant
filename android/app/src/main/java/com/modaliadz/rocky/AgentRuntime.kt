@@ -149,18 +149,31 @@ object ToolCallParser {
                         }
                         inner.append(c); j++
                     }
-                    // Parse key/value pairs from the inner object text.
+                    // Parse key/value pairs from the inner object text with
+                    // a cursor parser, NOT regex: the previous regex
+                    // extraction over multi-KB model content (HTML/CSS/JS
+                    // full of quotes) is the stack-overflow suspect in run
+                    // 40141110116's model-plan test (StackOverflowError).
+                    // This parser is iterative with bounded depth.
                     val innerText = inner.toString()
-                    val kv = Regex("\"((?:[^\"\\\\]|\\\\.)*)\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
-                    for (m in kv.findAll(innerText)) {
-                        val k = m.groupValues[1].replace("\\\"", "\"").replace("\\n", "\n")
-                        val v = m.groupValues[2].replace("\\\"", "\"").replace("\\n", "\n").replace("\\\\", "\\")
-                        args[k] = v
+                    var p = 0
+                    while (p < innerText.length && innerText[p].isWhitespace()) p++
+                    if (p < innerText.length && innerText[p] == '{') {
+                        p++
+                        while (p < innerText.length) {
+                            val (k, afterK) = JsonStrings.readString(innerText, p) ?: break
+                            p = afterK
+                            while (p < innerText.length && innerText[p].isWhitespace()) p++
+                            if (p < innerText.length && innerText[p] == ':') p++ else break
+                            val (v, afterV) = JsonStrings.readString(innerText, p) ?: break
+                            p = afterV
+                            args[k] = v
+                            while (p < innerText.length && innerText[p].isWhitespace()) p++
+                            if (p < innerText.length && innerText[p] == ',') { p++; continue }
+                            break
+                        }
                     }
                     idx = j + 1
-                    @Suppress("UNUSED_VARIABLE") val unusedKey = key
-                    @Suppress("UNUSED_VARIABLE") val unusedCur = cur
-                    @Suppress("UNUSED_VARIABLE") val unusedReading = readingKey
                 }
             } else {
                 idx = q2 + 1
@@ -181,7 +194,10 @@ class AgentRuntime(
         const val MAX_ATTEMPTS_PER_TOOL = 2
     }
 
-    fun run(goal: String, model: ModelClient?, cancelled: AtomicBoolean): AgentResult {
+    fun run(
+        goal: String, model: ModelClient?, cancelled: AtomicBoolean,
+        history: List<ChatMessage> = emptyList(), memoryText: String = ""
+    ): AgentResult {
         val steps = mutableListOf<AgentStep>()
         val started = System.currentTimeMillis()
         val slug = if (goal.contains("restaurant", ignoreCase = true)) "restaurant" else "project"
@@ -203,7 +219,16 @@ class AgentRuntime(
         var plan: List<Pair<String, Map<String, String>>> = emptyList()
         if (model != null && !cancelled.get() && !timedOut()) {
             try {
-                val prompt = "You are ROCKY, an autonomous coding agent. Goal: $goal. " +
+                val context = buildString {
+                    if (history.isNotEmpty()) {
+                        append("Conversation so far (follow-ups refer to this):\n")
+                        for (m in history.takeLast(10)) append("${m.role}: ${m.text.take(300)}\n")
+                    }
+                    if (memoryText.isNotBlank()) append("User-controlled memory:\n$memoryText\n")
+                    append("Available tools: ${ToolRegistry.knownTools.joinToString(", ")}.\n")
+                }
+                val prompt = "You are ROCKY, a calm, confident, futuristic personal assistant acting as an autonomous coding agent. " +
+                    context + "Goal: $goal. " +
                     "Reply ONLY with a JSON array of tool calls. Each call: " +
                     "{\"tool\":\"create_file\",\"args\":{\"slug\":\"$slug\",\"filename\":\"index.html\",\"content\":\"...\"}}. " +
                     "Use create_file for index.html, styles.css and script.js, then validate_project. " +
@@ -283,7 +308,8 @@ class AgentRuntime(
         val success = validation.ok && steps.any { it.status == AgentStepStatus.DONE }
         val label = if (generatedByModel) "model output" else "scaffold tool (not model output)"
         val msg = buildString {
-            append("Agent finished. Generated via $label. ")
+            if (success) append("Agent finished. ") else append("Agent finished INCOMPLETE — ")
+            append("Generated via $label. ")
             append("Validation: ${if (validation.ok) "PASSED" else "FAILED — ${validation.detail}"}. ")
             append("Files: ${tools.listProjectFiles(slug).joinToString(", ")}. ")
             if (!success) append("See the step log for the exact failure. ")

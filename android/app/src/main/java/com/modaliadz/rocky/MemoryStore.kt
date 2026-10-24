@@ -135,16 +135,24 @@ class MemoryStore(context: Context) : FileStore, NoteStore {
         "${if (m.role == "user") "YOU" else "ROCKY"}: ${m.text}"
     }
 
-    // --- FileStore (internal filesDir, verified by read-back in TaskEngine) ---
+    // --- FileStore (internal filesDir ONLY, verified by read-back in
+    // TaskEngine; canonical safe-root check rejects any escape) ---
+    private fun safeFile(name: String): File? {
+        return try {
+            val root = filesDir.canonicalFile
+            val f = File(root, name).canonicalFile
+            if (f == root || f.path.startsWith(root.path + File.separator)) f else null
+        } catch (_: Exception) { null }
+    }
+
     override fun write(name: String, content: String): Boolean = try {
-        val safe = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "untitled.txt" }
-        File(filesDir, safe).writeText(content)
+        val f = safeFile(name) ?: return false
+        f.writeText(content)
         true
     } catch (_: Exception) { false }
 
     override fun read(name: String): String? = try {
-        val safe = name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        val f = File(filesDir, safe)
+        val f = safeFile(name) ?: return null
         if (f.exists()) f.readText() else null
     } catch (_: Exception) { null }
 

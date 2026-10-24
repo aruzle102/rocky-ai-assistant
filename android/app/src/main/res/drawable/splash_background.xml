@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch splash: dark navy background + the ROCKY emblem, matching the
+     launcher icon. Shown via Theme.Rocky.Splash until MainActivity swaps
+     to Theme.Rocky in onCreate. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ic_launcher_background" />
+    <item
+        android:drawable="@mipmap/ic_launcher_foreground"
+        android:gravity="center"
+        android:width="288dp"
+        android:height="288dp" />
+</layer-list>

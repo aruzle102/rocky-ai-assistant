@@ -154,6 +154,15 @@ class ProviderEngine(
     private val http: HttpClient,
     val health: MutableMap<String, ProviderHealth> = mutableMapOf()
 ) {
+    /** Rate-limited providers are not retried for 60 s (JARVIS dev_agent
+     *  _is_rate_limit, ported): on 429/quota, fail over to the next
+     *  provider immediately instead of retrying the same one. */
+    private val rateLimitedUntil = mutableMapOf<String, Long>()
+
+    fun isRateLimit(error: String): Boolean {
+        val e = error.lowercase()
+        return e.contains("429") || e.contains("quota") || e.contains("resource_exhausted") || e.contains("rate limit")
+    }
     fun healthOf(id: String): ProviderHealth = health.getOrPut(id) { ProviderHealth() }
 
     private fun recordSuccess(id: String, latencyMs: Long) {
@@ -176,7 +185,8 @@ class ProviderEngine(
 
     /** Order candidates for a mode. Never includes unusable providers. */
     fun orderCandidates(providers: List<Provider>, keys: Map<String, String>, mode: AiMode): List<Provider> {
-        val usable = providers.filter { isUsable(it, keys[it.id] ?: "") }
+        val now = System.currentTimeMillis()
+        val usable = providers.filter { isUsable(it, keys[it.id] ?: "") && (rateLimitedUntil[it.id] ?: 0L) <= now }
         return when (mode) {
             AiMode.FAST -> usable
             AiMode.DEEP -> usable.sortedByDescending { it.reasoningCapable }
@@ -200,7 +210,7 @@ class ProviderEngine(
             return r.body.trim()
         }
         val messages = StringBuilder()
-        messages.append("{\"role\":\"system\",\"content\":\"You are ROCKY, a calm, confident, direct masculine AI assistant. Answer concisely.\"}")
+        messages.append("{\"role\":\"system\",\"content\":\"You are ROCKY, a calm, confident, futuristic personal assistant. You are context-aware: use the conversation history and the user-controlled memory provided. Be concise when appropriate, explain what you are doing and what you will do next, and say plainly what you cannot do. Routing: answer directly when you know it; use research only when the user asks or the answer needs current data. Confirm before any sensitive action (delete, share, send). Report task results briefly (1-2 sentences) plus the details. Respond in the user's language. Only remember critical preferences the user states. Never claim a capability you do not have.\"}")
         for (m in history.takeLast(10)) {
             messages.append(",{\"role\":\"${if (m.role == "rocky") "assistant" else "user"}\",\"content\":\"${JsonMini.escape(m.text)}\"}")
         }
@@ -252,6 +262,9 @@ class ProviderEngine(
                 val latency = System.currentTimeMillis() - start
                 lastError = e.message ?: "unknown error"
                 recordFailure(p.id, lastError)
+                if (isRateLimit(lastError)) {
+                    rateLimitedUntil[p.id] = System.currentTimeMillis() + 60_000
+                }
                 attempts.add(ChatAttempt(p.id, false, latency, lastError))
             }
         }

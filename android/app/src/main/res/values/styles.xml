@@ -7,4 +7,9 @@
         <item name="android:windowBackground">@color/rocky_bg</item>
         <item name="android:textColor">@color/rocky_text</item>
     </style>
+
+    <style name="Theme.Rocky.Splash" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>

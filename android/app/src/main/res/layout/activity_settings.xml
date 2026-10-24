@@ -143,6 +143,12 @@
             android:textColor="@color/rocky_dim"
             android:textSize="12sp" />
         <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Providers, honestly: Pollinations is keyless (GET, verified working, but NOT private and rate-limited — never unlimited). OpenRouter, Gemini, Groq, Mistral, Cloudflare and SambaNova need your own free key; their free tiers have limits. Gemini Live is NOT integrated: voice here is Android SpeechRecognizer + Android TTS + chat API. Keys are stored encrypted when possible (see permission status below), never in source, logs, or the APK."
+            android:textColor="@color/rocky_dim"
+            android:textSize="12sp" />
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"

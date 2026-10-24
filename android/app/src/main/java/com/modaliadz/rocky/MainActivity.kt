@@ -53,7 +53,8 @@ class MainActivity : AppCompatActivity() {
     private var aiCancelled = AtomicBoolean(false)
     private var lastUserText = ""
     private var pendingAgentResult: AgentResult? = null
-    private val agentSteps = mutableListOf<TaskStep>()
+    private var pendingPreviewSlug: String? = null
+    private val agentSteps = TaskHistory()
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -62,6 +63,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Swap the splash theme for the app theme before content is drawn.
+        setTheme(R.style.Theme_Rocky)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         store = MemoryStore(this)
@@ -123,6 +126,11 @@ class MainActivity : AppCompatActivity() {
                 if (pending != null) {
                     pendingAgentResult = null
                     deliverAgentResult(pending)
+                } else if (pendingPreviewSlug != null) {
+                    val slug = pendingPreviewSlug
+                    pendingPreviewSlug = null
+                    setState(RockyState.IDLE)
+                    startActivity(Intent(this, PreviewActivity::class.java).putExtra("slug", slug))
                 } else {
                     setState(RockyState.IDLE)
                 }
@@ -329,13 +337,30 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Task requests from voice OR text go to the REAL task engine, not
+        // to a chat-only answer. Research uses the real web_research tool
+        // and cites what was actually found (source in the report).
+        if (lower.startsWith("create file") || lower.startsWith("create note") ||
+            lower.startsWith("remind") || lower.startsWith("open ") ||
+            lower.startsWith("research") || lower.startsWith("deep research") ||
+            lower.startsWith("search:") || lower.startsWith("search ")) {
+            val taskText = when {
+                lower.startsWith("search:") -> "research: " + text.substringAfter(":").trim()
+                lower.startsWith("search ") -> "research: " + text.substring(7).trim()
+                else -> text
+            }
+            runChatTask(taskText)
+            return
+        }
+
         // Compare trigger: "compare: <question>" asks 2 providers and shows both.
         if (text.startsWith("compare:", ignoreCase = true)) {
             val q = text.substringAfter(":").trim()
             setState(RockyState.THINKING)
             Thread {
                 try {
-                    val res = engine.compare(q, emptyList(), store.providersWithOverrides(), store.keysMap(), store.accountsMap(), store.modelsMap())
+                    val compareHistory = messages.filter { it.role == "user" || it.role == "rocky" }.takeLast(20)
+                    val res = engine.compare(q, compareHistory, store.providersWithOverrides(), store.keysMap(), store.accountsMap(), store.modelsMap())
                     runOnUiThread {
                         res.first?.let { addMessage("rocky", "[${it.providerId}] ${it.text}", it.providerId) }
                         res.second?.let { addMessage("rocky", "[${it.providerId}] ${it.text}", it.providerId) }
@@ -368,9 +393,20 @@ class MainActivity : AppCompatActivity() {
                     }
                     providerLabel = "local"
                 } else {
-                    val history = if (store.memoryInCloud) messages.filter { it.role == "user" || it.role == "rocky" } else emptyList()
+                    // ONE BRAIN: every turn carries the conversation history
+                    // (last 20 turns, so follow-ups work) plus, only when the
+                    // user enabled it, their user-controlled memory entries.
+                    // History is the current session context; stored memory
+                    // entries stay on-device unless the toggle is ON.
+                    val history = messages.filter { it.role == "user" || it.role == "rocky" }.takeLast(20)
+                    val memText = if (store.memoryInCloud) {
+                        store.cappedMemory().all().joinToString("\n") { "${it.category}: ${it.key} = ${it.value}" }
+                    } else ""
+                    val prompt = if (memText.isNotBlank()) {
+                        "User-controlled memory:\n$memText\n\nUser request: $text"
+                    } else text
                     val res = engine.chat(
-                        text, history, m, store.providersWithOverrides(),
+                        prompt, history, m, store.providersWithOverrides(),
                         store.keysMap(), store.accountsMap(), store.modelsMap(), store.preferredProvider
                     )
                     reply = res.text
@@ -393,8 +429,44 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun runChatTask(taskText: String) {
+        setState(RockyState.EXECUTING)
+        Thread {
+            // Deep research: multi-query, source-grounded, cancellable.
+            if (taskText.startsWith("deep research:", ignoreCase = true)) {
+                val q = taskText.substringAfter(":").trim()
+                val tools = ToolRegistry(java.io.File(filesDir, "projects"), store, store, RealResearchClient(), aiCancelled)
+                val res = tools.execute("deep_research", mapOf("query" to q, "depth" to "standard"))
+                runOnUiThread {
+                    addMessage("rocky", res.output)
+                    if (res.status == ToolStatus.DONE) {
+                        speak(res.output.take(600))
+                    } else {
+                        showNotice(res.output)
+                        setState(RockyState.ERROR)
+                    }
+                }
+                return@Thread
+            }
+            val steps = TaskEngine.planFor(taskText)
+            val report = TaskEngine.execute(steps, store, store, RealResearchClient())
+            runOnUiThread {
+                addMessage("rocky", report)
+                // Fire real http(s) intents for OPEN_URL steps (verified by TaskEngine).
+                for (s in steps) {
+                    if (s.detail.startsWith("OPEN_URL:")) {
+                        val url = s.detail.removePrefix("OPEN_URL:")
+                        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (_: Exception) { }
+                    }
+                }
+                val spoken = steps.joinToString(" ") { it.detail }.take(600)
+                if (spoken.isNotBlank()) speak(spoken) else setState(RockyState.IDLE)
+            }
+        }.start()
+    }
+
     private fun runAgent(goal: String) {
-        val tools = ToolRegistry(java.io.File(filesDir, "projects"), store, store, RealResearchClient())
+        val tools = ToolRegistry(java.io.File(filesDir, "projects"), store, store, RealResearchClient(), aiCancelled)
         agentSteps.clear()
         tasksPanel.visibility = View.VISIBLE
         backNav.panelOpen = true
@@ -427,10 +499,14 @@ class MainActivity : AppCompatActivity() {
                         else -> StepStatus.PENDING
                     }
                     agentSteps.add(TaskStep(StepKind.PLAN_ONLY, "${step.tool} — ${step.status}", "", mapped, step.output))
-                    taskAdapter.setAll(agentSteps)
+                    taskAdapter.setAll(agentSteps.all())
                 }
             }
-            val result = runtime.run(goal, modelClient, aiCancelled)
+            val agentHistory = messages.filter { it.role == "user" || it.role == "rocky" }.takeLast(10)
+            val agentMemory = if (store.memoryInCloud) {
+                store.cappedMemory().all().joinToString("\n") { "${it.category}: ${it.key} = ${it.value}" }
+            } else ""
+            val result = runtime.run(goal, modelClient, aiCancelled, agentHistory, agentMemory)
             runOnUiThread {
                 if (currentState == RockyState.SPEAKING) {
                     pendingAgentResult = result
@@ -444,11 +520,23 @@ class MainActivity : AppCompatActivity() {
     private fun deliverAgentResult(result: AgentResult) {
         addMessage("rocky", result.message, if (result.generatedByModel) "agent-model" else "agent-scaffold")
         if (result.success) {
+            // Website = files + validation + preview. Files and validation
+            // are done; the preview screen opens next (after speech, so
+            // the spoken summary is not cut off; immediately if TTS is off).
             sfx.success()
-            speak("Done. Your restaurant website is ready in Projects. Tap Projects, then Preview to see it working.")
+            val slug = result.projectSlug
+            if (slug != null && tts.ready && !muted) {
+                pendingPreviewSlug = slug
+                speak("Done. Your restaurant website is ready — files validated. Opening the preview next.")
+            } else if (slug != null) {
+                speak("Done. Your restaurant website is ready — files validated.")
+                startActivity(Intent(this, PreviewActivity::class.java).putExtra("slug", slug))
+            } else {
+                speak("Done. Your restaurant website is ready — files validated.")
+            }
         } else {
             sfx.error()
-            speak("The website build finished with problems. Check the step log in Tasks for the exact error.")
+            speak("The website build is incomplete. Check the step log in Tasks for the exact error.")
         }
     }
 

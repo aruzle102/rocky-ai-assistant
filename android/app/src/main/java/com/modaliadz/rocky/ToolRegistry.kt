@@ -2,6 +2,7 @@ package com.modaliadz.rocky
 
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -20,21 +21,44 @@ class ToolRegistry(
     private val projectsRoot: File,
     private val flatFiles: FileStore,
     private val notes: NoteStore,
-    private val research: ResearchClient
+    private val research: ResearchClient,
+    private val cancelled: AtomicBoolean = AtomicBoolean(false),
+    deep: DeepResearch? = null
 ) {
     companion object {
         /** Plans may use ONLY these tools (planner discipline). */
         val knownTools = setOf(
             "create_file", "edit_file", "read_file", "list_files", "delete_file",
-            "web_research", "create_note", "create_reminder", "open_url",
+            "web_research", "deep_research", "create_note", "create_reminder", "open_url",
             "explain_code", "validate_project", "preview_project", "export_project_zip"
         )
     }
-    fun projectDir(slug: String): File = File(projectsRoot, slug)
+
+    private val deepResearch: DeepResearch by lazy { deep ?: DeepResearch(research) }
+
+    /** Safe root: projects live ONLY under filesDir/projects/<slug>.
+     *  The slug is sanitised and every resolved path is checked against
+     *  the canonical project root (JARVIS file_controller _SAFE_ROOTS /
+     *  _is_safe_path, ported). Anything escaping the root is rejected. */
+    fun projectDir(slug: String): File {
+        val safe = slug.replace("..", "_").replace(Regex("[^A-Za-z0-9_-]"), "_").take(64).ifBlank { "project" }
+        return File(projectsRoot, safe)
+    }
+
+    private fun safeProjectFile(slug: String, filename: String): File? {
+        return try {
+            val root = projectDir(slug).canonicalFile
+            val flat = filename.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val f = File(root, flat).canonicalFile
+            if (f == root || f.path.startsWith(root.path + File.separator)) f else null
+        } catch (_: Exception) { null }
+    }
 
     fun listProjectFiles(slug: String): List<String> {
         val dir = projectDir(slug)
-        return if (dir.exists()) dir.listFiles()?.map { it.name }?.sorted() ?: emptyList() else emptyList()
+        return if (dir.exists()) {
+            dir.listFiles()?.map { it.name }?.filter { !it.startsWith(".") }?.sorted() ?: emptyList()
+        } else emptyList()
     }
 
     fun listProjects(): List<String> {
@@ -44,19 +68,70 @@ class ToolRegistry(
     }
 
     fun readProjectFile(slug: String, filename: String): String? {
-        val f = File(projectDir(slug), filename)
+        val f = safeProjectFile(slug, filename) ?: return null
         return if (f.exists()) f.readText() else null
     }
 
-    fun writeProjectFile(slug: String, filename: String, content: String): Boolean {
+    fun writeProjectFile(slug: String, filename: String, content: String, tool: String = "create_file"): Boolean {
         return try {
+            val f = safeProjectFile(slug, filename) ?: return false
             val dir = projectDir(slug)
             if (!dir.exists()) dir.mkdirs()
-            val safe = filename.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            File(dir, safe).writeText(content)
+            f.writeText(content)
+            stamp(slug, f.name, tool)
             true
         } catch (_: Exception) { false }
     }
+
+    /** Sidecar metadata (JARVIS jarvis_file_stamp): creator tool + timestamp
+     *  per file, in <project>/.rocky-stamps.json (hidden from listings). */
+    private fun stamp(slug: String, filename: String, tool: String) {
+        try {
+            val dir = projectDir(slug)
+            val sidecar = File(dir, ".rocky-stamps.json")
+            val map = readStamps(sidecar)
+            map[filename] = tool to System.currentTimeMillis()
+            val sb = StringBuilder("{")
+            var first = true
+            for ((name, pair) in map) {
+                if (!first) sb.append(",")
+                first = false
+                sb.append("\"${escJson(name)}\":{\"tool\":\"${escJson(pair.first)}\",\"at\":${pair.second}}")
+            }
+            sb.append("}")
+            sidecar.writeText(sb.toString())
+        } catch (_: Exception) { }
+    }
+
+    private fun readStamps(sidecar: File): MutableMap<String, Pair<String, Long>> {
+        val out = mutableMapOf<String, Pair<String, Long>>()
+        try {
+            if (!sidecar.exists()) return out
+            val text = sidecar.readText()
+            var p = 0
+            while (p < text.length) {
+                val (name, afterName) = JsonStrings.readString(text, p) ?: break
+                p = afterName
+                val toolKey = text.indexOf("\"tool\"", p)
+                if (toolKey < 0) break
+                val toolColon = text.indexOf(':', toolKey)
+                val (tool, afterTool) = JsonStrings.readString(text, toolColon + 1) ?: break
+                val atKey = text.indexOf("\"at\"", afterTool)
+                if (atKey < 0) break
+                val atColon = text.indexOf(':', atKey)
+                var q = atColon + 1
+                while (q < text.length && text[q].isWhitespace()) q++
+                val numStart = q
+                while (q < text.length && (text[q].isDigit() || text[q] == '-')) q++
+                out[name] = tool to (text.substring(numStart, q).toLongOrNull() ?: 0L)
+                p = q
+            }
+        } catch (_: Exception) { }
+        return out
+    }
+
+    private fun escJson(s: String): String =
+        s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
 
     fun projectFilesMap(slug: String): Map<String, String> {
         val out = mutableMapOf<String, String>()
@@ -74,7 +149,7 @@ class ToolRegistry(
         val files = projectFilesMap(slug).toMutableMap()
         val changed = ProjectFixer.fix(files)
         if (changed.isEmpty()) return false
-        for ((name, content) in changed) writeProjectFile(slug, name, content)
+        for ((name, content) in changed) writeProjectFile(slug, name, content, "fix_project")
         return true
     }
 
@@ -85,7 +160,7 @@ class ToolRegistry(
             val exports = File(projectsRoot, "exports")
             if (!exports.exists()) exports.mkdirs()
             val outFile = File(exports, "$slug.zip")
-            val files = dir.listFiles()?.filter { it.isFile }?.sortedBy { it.name } ?: emptyList()
+            val files = dir.listFiles()?.filter { it.isFile && !it.name.startsWith(".") }?.sortedBy { it.name } ?: emptyList()
             if (files.isEmpty()) return null
             ZipOutputStream(FileOutputStream(outFile)).use { zip ->
                 for (f in files) {
@@ -116,8 +191,11 @@ class ToolRegistry(
             "create_file" -> {
                 val slug = args["slug"]
                 val filename = args["filename"] ?: return ToolResult(ToolStatus.FAILED, "create_file needs filename")
-                val content = args["content"] ?: ""
-                val ok = if (slug != null) writeProjectFile(slug, filename, content)
+                val rawContent = args["content"] ?: ""
+                // Fence-stripping (JARVIS code_helper _clean_code): model
+                // output wrapped in ``` fences is cleaned before writing.
+                val content = if (slug != null) CodeCleaner.clean(rawContent) else rawContent
+                val ok = if (slug != null) writeProjectFile(slug, filename, content, "create_file")
                 else flatFiles.write(filename, content)
                 if (ok) ToolResult(ToolStatus.DONE, "Created $filename") else ToolResult(ToolStatus.FAILED, "Could not create $filename")
             }
@@ -125,12 +203,13 @@ class ToolRegistry(
                 val slug = args["slug"]
                 val filename = args["filename"] ?: return ToolResult(ToolStatus.FAILED, "edit_file needs filename")
                 val old = args["old"] ?: return ToolResult(ToolStatus.FAILED, "edit_file needs old text")
-                val newText = args["new"] ?: ""
+                val rawNew = args["new"] ?: ""
+                val newText = if (slug != null) CodeCleaner.clean(rawNew) else rawNew
                 val current = (if (slug != null) readProjectFile(slug, filename) else flatFiles.read(filename))
                     ?: return ToolResult(ToolStatus.FAILED, "File not found: $filename")
                 if (!current.contains(old)) return ToolResult(ToolStatus.FAILED, "Old text not found in $filename")
                 val updated = current.replace(old, newText)
-                val ok = if (slug != null) writeProjectFile(slug, filename, updated) else flatFiles.write(filename, updated)
+                val ok = if (slug != null) writeProjectFile(slug, filename, updated, "edit_file") else flatFiles.write(filename, updated)
                 if (ok) ToolResult(ToolStatus.DONE, "Edited $filename") else ToolResult(ToolStatus.FAILED, "Could not save $filename")
             }
             "read_file" -> {
@@ -150,7 +229,7 @@ class ToolRegistry(
                 }
                 val slug = args["slug"]
                 val filename = args["filename"] ?: return ToolResult(ToolStatus.FAILED, "delete_file needs filename")
-                val f = if (slug != null) File(projectDir(slug), filename) else File(filename)
+                val f = if (slug != null) (safeProjectFile(slug, filename) ?: return ToolResult(ToolStatus.FAILED, "Unsafe path rejected: $filename")) else File(filename)
                 val deleted = try { f.exists() && f.delete() } catch (_: Exception) { false }
                 if (deleted) ToolResult(ToolStatus.DONE, "Deleted $filename") else ToolResult(ToolStatus.FAILED, "Could not delete $filename")
             }
@@ -159,6 +238,20 @@ class ToolRegistry(
                 val r = research.search(q)
                 if (r != null) ToolResult(ToolStatus.DONE, "${r.summary} (Source: ${r.source})")
                 else ToolResult(ToolStatus.FAILED, "No research result for '$q'")
+            }
+            "deep_research" -> {
+                val q = args["query"] ?: return ToolResult(ToolStatus.FAILED, "deep_research needs query")
+                val depth = when (args["depth"]?.lowercase()) {
+                    "quick" -> ResearchDepth.QUICK
+                    "deep" -> ResearchDepth.DEEP
+                    else -> ResearchDepth.STANDARD
+                }
+                val brief = deepResearch.run(q, depth, cancelled)
+                when {
+                    brief.cancelled -> ToolResult(ToolStatus.FAILED, "Research cancelled after ${brief.findings.size} findings")
+                    brief.findings.isEmpty() -> ToolResult(ToolStatus.FAILED, "No research results for '$q'")
+                    else -> ToolResult(ToolStatus.DONE, "${brief.summary}\nSources: ${brief.sources.joinToString(", ")}")
+                }
             }
             "create_note" -> {
                 val text = args["text"] ?: return ToolResult(ToolStatus.FAILED, "create_note needs text")

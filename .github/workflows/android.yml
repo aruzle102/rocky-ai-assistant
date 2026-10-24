@@ -37,6 +37,17 @@ jobs:
           chmod +x gradlew
           ./gradlew testDebugUnitTest --stacktrace
 
+      - name: Upload unit-test reports (diagnosis, even on failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ROCKY_AI-test-reports
+          path: |
+            android/app/build/test-results/testDebugUnitTest
+            android/app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Build debug APK with Gradle
         run: |
           cd android
@@ -124,6 +135,13 @@ jobs:
             sleep 15
             adb exec-out screencap -p > screenshot.png
             ls -lh screenshot.png
+            # App-info view shows the launcher icon as the system renders it
+            # (best available launcher-adjacent view in an emulator; the
+            # launcher grid itself is not captured here).
+            adb shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:com.modaliadz.rocky
+            sleep 4
+            adb exec-out screencap -p > screenshot-appinfo.png
+            ls -lh screenshot-appinfo.png || true
 
       - name: Upload screenshot artifact
         if: always()
@@ -131,6 +149,15 @@ jobs:
         with:
           name: ROCKY_AI-screenshot
           path: screenshot.png
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload app-info screenshot artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ROCKY_AI-screenshot-appinfo
+          path: screenshot-appinfo.png
           if-no-files-found: warn
           retention-days: 30
 

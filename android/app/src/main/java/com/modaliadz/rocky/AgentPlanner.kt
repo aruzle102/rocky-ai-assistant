@@ -1,6 +1,47 @@
 package com.modaliadz.rocky
 
 /**
+ * Minimal JSON string reader (no regex, no backtracking, no recursion):
+ * reads one JSON string starting at or after [from], skipping whitespace.
+ * Returns the decoded value and the index just past the closing quote.
+ * Used by the tool-call parser and the capped-memory loader so that
+ * multi-KB model content (HTML/CSS/JS full of quotes) cannot blow the
+ * stack the way a backtracking regex extraction can.
+ */
+object JsonStrings {
+    fun readString(s: String, from: Int): Pair<String, Int>? {
+        var p = from
+        while (p < s.length && s[p].isWhitespace()) p++
+        if (p >= s.length || s[p] != '"') return null
+        p++
+        val sb = StringBuilder()
+        while (p < s.length) {
+            val c = s[p]
+            if (c == '\\' && p + 1 < s.length) {
+                val e = s[p + 1]
+                if (e == 'u' && p + 5 < s.length) {
+                    val code = s.substring(p + 2, p + 6).toIntOrNull(16)
+                    if (code != null) sb.append(code.toChar())
+                    p += 6
+                } else {
+                    when (e) {
+                        'n' -> sb.append('\n'); 't' -> sb.append('\t'); 'r' -> sb.append('\r')
+                        '"' -> sb.append('"'); '\\' -> sb.append('\\'); '/' -> sb.append('/')
+                        else -> sb.append(e)
+                    }
+                    p += 2
+                }
+            } else if (c == '"') {
+                return sb.toString() to (p + 1)
+            } else {
+                sb.append(c); p++
+            }
+        }
+        return null
+    }
+}
+
+/**
  * JARVIS-adapted agent discipline (architecture inspired by
  * MAL19INDUSTRIES/JARVIS-OS-V.2 agent/planner.py, agent/error_handler.py,
  * memory/memory_manager.py — Kotlin code is original, no Jarvis code copied).
@@ -138,19 +179,30 @@ class CappedMemory {
     }
 
     fun fromJson(json: String) {
+        // Cursor parser (no regex) — same stack-safety reason as JsonStrings.
         entries.clear()
-        val kv = Regex("\"(category|key|value)\":\"((?:[^\"\\\\]|\\\\.)*)\"")
-        var category = ""; var key = ""; var value = ""
-        var count = 0
-        for (m in kv.findAll(json)) {
-            val v = m.groupValues[2].replace("\\\"", "\"").replace("\\n", "\n").replace("\\\\", "\\")
-            when (m.groupValues[1]) {
-                "category" -> category = v
-                "key" -> key = v
-                "value" -> { value = v; count++; put(category, key, value) }
+        var p = 0
+        while (p < json.length) {
+            val open = json.indexOf('{', p)
+            if (open < 0) break
+            p = open + 1
+            var category = ""; var key = ""; var value = ""
+            while (p < json.length) {
+                val (k, afterK) = JsonStrings.readString(json, p) ?: break
+                p = afterK
+                while (p < json.length && json[p].isWhitespace()) p++
+                if (p < json.length && json[p] == ':') p++ else break
+                val (v, afterV) = JsonStrings.readString(json, p) ?: break
+                p = afterV
+                when (k) { "category" -> category = v; "key" -> key = v; "value" -> value = v }
+                while (p < json.length && json[p].isWhitespace()) p++
+                if (p < json.length && json[p] == ',') { p++; continue }
+                break
             }
+            if (category.isNotBlank() && key.isNotBlank()) put(category, key, value)
+            val close = json.indexOf('}', p)
+            p = if (close < 0) json.length else close + 1
         }
-        @Suppress("UNUSED_VARIABLE") val parsed = count
     }
 
     private fun esc(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")

@@ -72,6 +72,28 @@ class AgentTest {
     }
 
     @Test
+    fun agentPromptIncludesHistoryMemoryAndTools() {
+        val tmp = Files.createTempDirectory("rocky-brain").toFile()
+        val tools = registry(tmp)
+        var captured = ""
+        val model = object : ModelClient {
+            override fun generate(prompt: String): String {
+                captured = prompt
+                return "[]"
+            }
+        }
+        val history = listOf(ChatMessage("user", "I love Italian food", ""))
+        AgentRuntime(tools).run(
+            "Build a restaurant website", model, AtomicBoolean(false),
+            history, "preferences: cuisine = Italian"
+        )
+        assertTrue(captured.contains("Italian food"))
+        assertTrue(captured.contains("cuisine"))
+        assertTrue(captured.contains("create_file"))
+        assertTrue(captured.contains("validate_project"))
+    }
+
+    @Test
     fun cancelledRunDoesNotClaimSuccess() {
         val tmp = Files.createTempDirectory("rocky-cancel").toFile()
         val tools = registry(tmp)
