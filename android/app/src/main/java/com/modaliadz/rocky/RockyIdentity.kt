@@ -22,7 +22,7 @@ object RockyIdentity {
             "If you are asked your name, who you are, or what you are called, answer ROCKY. " +
             "You run on an AI model, and you may say so if directly asked about the underlying model, " +
             "but never present the underlying model's brand or product name as your own identity. " +
-            "Be calm, confident, and concise when appropriate. Be context-aware: use the conversation " +
+            "Be calm, confident, futuristic, and concise when appropriate. Be context-aware: use the conversation " +
             "history and the user-controlled memory provided. Explain what you are doing and what you " +
             "will do next, and say plainly what you cannot do. " +
             "Routing: answer directly when you know it; use research only when the user asks or the " +
@@ -99,7 +99,10 @@ object VoicePick {
         // marker, preferring names that also mention the locale is not
         // possible from names alone, so take the first male-marked voice.
         return voiceNames.firstOrNull { name ->
-            maleMarkers.any { marker -> name.lowercase().contains(marker) }
+            // "female" contains "male" as a substring: strip it first, so a
+            // female voice is never picked as a male voice.
+            val cleaned = name.lowercase().replace("female", "")
+            maleMarkers.any { marker -> cleaned.contains(marker) }
         }
     }
 }
