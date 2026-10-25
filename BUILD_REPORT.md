@@ -137,7 +137,57 @@ identity answer on the user's phone is still phone-required.
 
 | Commit | Run | Result |
 |---|---|---|
-| <!-- V5-CODE-COMMIT --> | <!-- V5-RUN --> | <!-- V5-RUN-RESULT --> |
+| bbabdb8 — v5 rebuild (head v2, Piper voice, identity fix, multi-view UI) | 40147593567 | FAILED in 43 s: `FAIL_ON_PROJECT_REPOS` rejects project-level `flatDir` in app/build.gradle |
+| a13b04d — flatDir repo moved to settings.gradle | 40147800821 | FAILED in 1 m 16 s: `OfflineTts.sampleRate` is a function in the 1.12.0 AAR, not a property |
+| e964908 — sampleRate() call fix | 40148008883 | FAILED in 1 m 31 s: 2 unit tests — ReuseTest prompt phrase + VoiceIdentityTest female/male substring bug |
+| de80d7e — prompt phrase restored + male-voice pick fix | 40148241505 | **BUILD JOB GREEN in 2 m 13 s; 52/52 unit tests, 0 failures** (test reports artifact). Emulator: screenshot job green (19 m 41 s) but the captured frame is an emulator "Process system isn't responding" dialog, NOT the character (see Emulator evidence); demo job FAILED in 11 m 39 s (record script exit 1 after a ~10 min no-KVM boot). |
+
+## v5 delivery verification (run 40148241505, APK from its artifact)
+
+- APK: **127,090,854 bytes** (~121 MB — large APK explicitly authorised;
+  sherpa-onnx native libs for 4 ABIs + Piper model + espeak data dominate
+  the size), 942 zip entries, zip test clean.
+- Package `com.modaliadz.rocky`, versionName 5.0, activities Main /
+  Console / Preview / Projects / Research / Settings, permissions
+  RECORD_AUDIO / INTERNET / MODIFY_AUDIO_SETTINGS, microphone feature,
+  glEsVersion — read from the APK manifest and dex (app classes in
+  classes3.dex: HeadRenderer, PiperTts, ConsoleActivity, ResearchActivity,
+  RockyIdentity, VisemeMapper all present).
+- Voice assets in the APK: `assets/voice/en_GB-alan-low.onnx`,
+  `assets/voice/tokens.txt`, `assets/voice/espeak-ng-data.zip`;
+  sherpa native libs for arm64-v8a / armeabi-v7a / x86 / x86_64.
+- No Capacitor web bundle (`assets/public/index.html` absent — the CI
+  check for this also passed).
+
+## Emulator evidence (run 40148241505) — read exactly, not as success
+
+- Screenshot job: GREEN (19 m 41 s), artifacts `ROCKY_AI-screenshot` and
+  `ROCKY_AI-screenshot-appinfo` (both 320×640 PNG, identical frames).
+  The frame shows an Android dialog "Process system isn't responding"
+  (Close app / Wait) over a dark screen with a faint teal arc — it is
+  NOT a screenshot of the ROCKY character, and it must not be presented
+  as one. The dialog names the emulator's system process, not the app;
+  the no-KVM emulator booted slowly (~10 min) and was unresponsive under
+  load (121 MB install + first-run asset extraction + GLES rendering).
+  This is an emulator-environment failure, not proof the app ANRs on a
+  real phone — but it is also not evidence the character renders, so
+  character rendering on a real phone remains phone-required.
+- Demo job: FAILED in 11 m 39 s — the record script exited 1 after boot
+  (same unresponsive emulator). No demo video was produced. The demo
+  upload step passed only because it uploads whatever exists.
+- Local copies of both frames: `evidence/v5-emulator-screenshot*.png`
+  (not committed to the repo).
+
+## Release
+
+- GitHub Release v5.0: https://github.com/aruzle102/rocky-ai-assistant/releases/tag/v5.0
+- Direct APK: https://github.com/aruzle102/rocky-ai-assistant/releases/download/v5.0/ROCKY_AI.apk
+  (127,090,854 bytes, asset state `uploaded`, verified with an HTTP 302
+  to the release asset with content-type
+  `application/vnd.android.package-archive`).
+- Green build run: https://github.com/aruzle102/rocky-ai-assistant/actions/runs/40148241505
+- APK also copied to `~/workspace/your_files/ROCKY_AI.apk` and
+  `~/workspace/rocky-ai/ROCKY_AI.apk` (same 127,090,854 bytes).
 
 ## Limitations — still needs the user's phone
 
