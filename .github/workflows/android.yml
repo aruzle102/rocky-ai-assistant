@@ -115,7 +115,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Download APK artifact
         uses: actions/download-artifact@v4
@@ -129,13 +129,17 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          emulator-boot-timeout: 1200
           script: |
             adb wait-for-device
-            # Install retry: run 40142349835 failed here once with
-            # "Broken pipe (32)" right after boot (adb transport flake).
-            for i in 1 2 3; do
-              adb install -r apk/app-debug.apk && break || sleep 10
-            done
+            # Install retry as plain sequential commands (no shell loop:
+            # run 40143683257 failed with "Syntax error: end of file
+            # unexpected (expecting done)" on a for-loop in this script).
+            # Run 40142349835 failed one install with "Broken pipe (32)"
+            # right after boot (adb transport flake).
+            adb install -r apk/app-debug.apk || sleep 10
+            adb install -r apk/app-debug.apk || sleep 10
+            adb install -r apk/app-debug.apk
             adb shell am start -n com.modaliadz.rocky/.MainActivity
             sleep 15
             adb exec-out screencap -p > screenshot.png
@@ -177,7 +181,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Download APK artifact
         uses: actions/download-artifact@v4
@@ -191,13 +195,15 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          emulator-boot-timeout: 1200
           script: |
             adb wait-for-device
-            # Install retry: run 40142349835 failed here once with
-            # "Broken pipe (32)" right after boot (adb transport flake).
-            for i in 1 2 3; do
-              adb install -r apk/app-debug.apk && break || sleep 10
-            done
+            # Install retry as plain sequential commands (no shell loop:
+            # run 40143683257 failed with "Syntax error: end of file
+            # unexpected (expecting done)" on a for-loop in this script).
+            adb install -r apk/app-debug.apk || sleep 10
+            adb install -r apk/app-debug.apk || sleep 10
+            adb install -r apk/app-debug.apk
             # NOTE (run 40142349835 fixes): screenrecord to /sdcard root
             # fails with "Permission denied" on API 34 — use Download/.
             # PreviewActivity is deliberately NOT exported, so it must
