@@ -95,7 +95,7 @@ class PiperTts(private val context: Context) {
                 val config = OfflineTtsConfig(model = modelConfig, maxNumSentences = 10)
                 val created = OfflineTts(context.assets, config)
                 tts = created
-                sampleRate = created.sampleRate
+                sampleRate = created.sampleRate()
                 available = true
                 handler.post { onReady(true) }
             } catch (e: Exception) {
