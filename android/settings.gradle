@@ -10,6 +10,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Pinned sherpa-onnx Android AAR (see app/libs/ + BUILD_REPORT
+        // for the release checksum verification). Declared here because
+        // FAIL_ON_PROJECT_REPOS forbids project-level repositories.
+        flatDir {
+            dirs 'app/libs'
+        }
     }
 }
 rootProject.name = "ROCKY AI"

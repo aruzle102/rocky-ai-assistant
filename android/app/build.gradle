@@ -33,15 +33,6 @@ android {
     }
 }
 
-repositories {
-    // Pinned sherpa-onnx Android AAR (see libs/ + BUILD_REPORT for the
-    // release checksum verification). flatDir is the documented way to
-    // depend on a local .aar.
-    flatDir {
-        dirs 'libs'
-    }
-}
-
 dependencies {
     // sherpa-onnx 1.12.0 (Apache-2.0): Piper neural TTS on-device.
     // AAR sha256 verified against the v1.12.0 release checksum.txt.
