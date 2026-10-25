@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rocky_bg"
+    android:padding="16dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Research"
+            android:textColor="@color/rocky_text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/researchQuery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_cyan"
+            android:textSize="16sp"
+            android:layout_marginTop="12dp" />
+        <TextView
+            android:id="@+id/researchSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_text"
+            android:textSize="14sp"
+            android:layout_marginTop="12dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sources (actually returned, never invented)"
+            android:textColor="@color/rocky_text"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp" />
+        <TextView
+            android:id="@+id/researchSources"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_text"
+            android:textSize="13sp"
+            android:layout_marginTop="8dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="20dp">
+            <Button
+                android:id="@+id/researchOpenButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Open first source" />
+            <Button
+                android:id="@+id/researchCloseButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Close" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

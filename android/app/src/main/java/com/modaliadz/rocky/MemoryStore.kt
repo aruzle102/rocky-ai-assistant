@@ -60,6 +60,20 @@ class MemoryStore(context: Context) : FileStore, NoteStore {
     var preferredProvider: String?
         get() = prefs.getString("preferred_provider", null)
         set(v) = prefs.edit().putString("preferred_provider", v).apply()
+    /** Voice engine: "piper" (ROCKY Voice, offline male, English) or "system". */
+    var voiceEngine: String
+        get() = prefs.getString("voice_engine", "piper") ?: "piper"
+        set(v) = prefs.edit().putString("voice_engine", v).apply()
+    /** Last deep-research result, shown in the Research view. */
+    var lastResearchQuery: String
+        get() = prefs.getString("last_research_query", "") ?: ""
+        set(v) = prefs.edit().putString("last_research_query", v).apply()
+    var lastResearchSummary: String
+        get() = prefs.getString("last_research_summary", "") ?: ""
+        set(v) = prefs.edit().putString("last_research_summary", v).apply()
+    var lastResearchSources: String
+        get() = prefs.getString("last_research_sources", "") ?: ""
+        set(v) = prefs.edit().putString("last_research_sources", v).apply()
 
     // --- provider credentials: encrypted store first, legacy app-private
     // prefs as read-through fallback (writes always go to the key store) ---

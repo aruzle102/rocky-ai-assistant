@@ -11,10 +11,10 @@ android {
         applicationId 'com.modaliadz.rocky'
         minSdk 26
         targetSdk 34
-        // v3 (WebView) was versionCode 1. v4 must be > 1 so Android accepts
-        // this APK as an update over the installed v3 app.
-        versionCode 2
-        versionName '4.0'
+        // v3 (WebView) was versionCode 1, v4 native was versionCode 2.
+        // v5 must be > 2 so Android accepts this APK as an update over v4.
+        versionCode 3
+        versionName '5.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -33,7 +33,19 @@ android {
     }
 }
 
+repositories {
+    // Pinned sherpa-onnx Android AAR (see libs/ + BUILD_REPORT for the
+    // release checksum verification). flatDir is the documented way to
+    // depend on a local .aar.
+    flatDir {
+        dirs 'libs'
+    }
+}
+
 dependencies {
+    // sherpa-onnx 1.12.0 (Apache-2.0): Piper neural TTS on-device.
+    // AAR sha256 verified against the v1.12.0 release checksum.txt.
+    implementation(name: 'sherpa-onnx-1.12.0', ext: 'aar')
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'

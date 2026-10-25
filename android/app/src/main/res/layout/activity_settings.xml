@@ -27,6 +27,23 @@
             android:layout_width="match_parent"
             android:layout_height="48dp" />
         <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Voice engine (default: ROCKY Voice)"
+            android:textColor="@color/rocky_dim" />
+        <Spinner
+            android:id="@+id/engineSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp" />
+        <TextView
+            android:id="@+id/piperStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ROCKY Voice: initialising…"
+            android:textColor="@color/rocky_dim"
+            android:textSize="13sp" />
+        <TextView
             android:id="@+id/pitchLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

@@ -200,22 +200,28 @@ class ProviderEngine(
 
     /** One attempt against one provider. Returns text or throws with a clear message. */
     fun attempt(p: Provider, apiKey: String, accountId: String, model: String, prompt: String, history: List<ChatMessage>): String {
+        return attemptWithMemory(p, apiKey, accountId, model, prompt, history, "")
+    }
+
+    /**
+     * Full attempt with user-controlled memory text. v5 identity fix: the
+     * Pollinations path previously sent the raw prompt with NO system
+     * prompt and NO history, so identity questions were answered with the
+     * underlying model's brand. It now receives the ROCKY system prompt,
+     * history and memory as URL-encoded text, exactly like keyed providers
+     * receive them as a system message.
+     */
+    fun attemptWithMemory(p: Provider, apiKey: String, accountId: String, model: String, prompt: String, history: List<ChatMessage>, memoryText: String): String {
         val base = if (p.accountIdNeeded) p.baseUrl.replace("ACCOUNT_ID", accountId.ifBlank { "ACCOUNT_ID" }) else p.baseUrl
         if (p.id == "pollinations") {
-            val url = base.trimEnd('/') + "/" + prompt.take(1500)
-                .replace(" ", "%20").replace("\n", " ")
-            val r = http.get(url)
+            val encoded = RockyIdentity.pollinationsPrompt(history, memoryText, prompt)
+            val r = http.get(base.trimEnd('/') + "/" + encoded)
             if (r.code != 200) throw RuntimeException("Pollinations HTTP ${r.code}")
             if (r.body.isBlank()) throw RuntimeException("Pollinations returned an empty reply")
             return r.body.trim()
         }
-        val messages = StringBuilder()
-        messages.append("{\"role\":\"system\",\"content\":\"You are ROCKY, a calm, confident, futuristic personal assistant. You are context-aware: use the conversation history and the user-controlled memory provided. Be concise when appropriate, explain what you are doing and what you will do next, and say plainly what you cannot do. Routing: answer directly when you know it; use research only when the user asks or the answer needs current data. Confirm before any sensitive action (delete, share, send). Report task results briefly (1-2 sentences) plus the details. Respond in the user's language. Only remember critical preferences the user states. Never claim a capability you do not have.\"}")
-        for (m in history.takeLast(10)) {
-            messages.append(",{\"role\":\"${if (m.role == "rocky") "assistant" else "user"}\",\"content\":\"${JsonMini.escape(m.text)}\"}")
-        }
-        messages.append(",{\"role\":\"user\",\"content\":\"${JsonMini.escape(prompt)}\"}")
-        val body = "{\"model\":\"${JsonMini.escape(model)}\",\"messages\":[$messages]}"
+        val messages = "[" + RockyIdentity.chatMessages(history, memoryText, prompt) + "]"
+        val body = "{\"model\":\"${JsonMini.escape(model)}\",\"messages\":$messages}"
         val headers = mutableMapOf("Content-Type" to "application/json")
         if (apiKey.isNotBlank()) headers["Authorization"] = "Bearer $apiKey"
         val r = http.post(base.trimEnd('/') + "/chat/completions", headers, body)

@@ -1,327 +1,79 @@
-# ROCKY AI
+# ROCKY AI — v5
 
-A holographic AI assistant for Android. Dark cinematic UI, a real-time Three.js
-particle humanoid (head + shoulders + torso, not a sphere), a real microphone
-analyser, Web Speech recognition + TTS, an offline local brain, an optional
-user-configured OpenAI-compatible endpoint, and a real in-app task/file system.
+A native Kotlin Android holographic AI assistant. ROCKY is the user's
+personal AI assistant: calm, confident, concise when appropriate, and
+context-aware. Its name is ROCKY on every provider path — if you ask
+"What is your name?", the answer is ROCKY, not the underlying model's
+brand (see BUILD_REPORT for the v4 identity bug and the v5 fix + real
+test).
 
 - **Repo:** https://github.com/aruzle102/rocky-ai-assistant
-- **App ID:** `com.modaliadz.rocky`
-- **App name:** ROCKY AI
-- **Stack:** Vite + React + TypeScript + Three.js + Capacitor 6
+- **Branch:** main — **App ID:** `com.modaliadz.rocky` (kept, so v5 updates over v4)
+- **App name:** ROCKY AI — **Version:** 5.0 (versionCode 3)
+- **Stack:** Kotlin + AndroidX AppCompat/Material + RecyclerView, XML layouts
+  (no Jetpack Compose, to keep the CI build deterministic), OpenGL ES 3.0
+  `GLSurfaceView` + custom GLSL shaders for the head, Android
+  `SpeechRecognizer`, Piper neural TTS via sherpa-onnx + system TTS fallback
 - **Build:** GitHub Actions (cloud) — see `.github/workflows/android.yml`
-- **No Lovable, no paid services, no bundled secrets.**
+- **Pinned:** compileSdk 34, minSdk 26, targetSdk 34, Java 17, AGP 8.2.1,
+  Kotlin 1.9.24, sherpa-onnx 1.12.0 (AAR, sha256-verified). No Node/npm/
+  Capacitor steps. No Lovable, no paid services, no bundled secrets.
 
-## Why this stack
+## What v5 is
 
-Native Kotlin + a 3D engine would be heavier to bootstrap and verify in this
-environment; React + Three.js gives a real GPU particle shader scene in one
-codebase, and Capacitor 6 packages it as a genuine Android app (own app ID,
-icon, splash, permissions, back-button handling, on-device Preferences) rather
-than a bookmark. It is not "just a website": the APK is a real installable
-Android application whose web layer runs inside Capacitor's WebView with
-native plugins. Trade-off, stated plainly: speech recognition/TTS go through
-the platform Web Speech APIs inside that WebView, so their quality depends on
-the device's speech services.
+- **A real 3D character, full-screen:** an anatomical head mesh
+  (forehead, brow, nose, lips, chin, jawline, cheekbones, ears, neck,
+  shoulders) with viseme-driven lips, blinking eyelids, gaze, expressions
+  and a state-colour motion system. Particles are only atmosphere.
+  Cinematic 5 s intro (particles converge, face materialises, camera
+  push-in, eyes open) with Skip and replay.
+- **A deep male voice, measured:** ROCKY Voice is Piper
+  `en_GB-alan-low-int8` running offline on-device via sherpa-onnx.
+  Its depth was measured, not assumed: median F0 98.8 Hz on the test
+  sentence (Ryan measured 156.9 Hz, Lessac 200.0 Hz — both rejected as
+  default). English only; Arabic/French use system TTS with a
+  male-voice preference. Mouth motion is driven by real Piper audio
+  amplitude + text visemes, or by system-TTS word ranges — never claimed
+  as phoneme-perfect.
+- **One brain:** every turn carries conversation history + user-controlled
+  capped memory + tool results. Follow-ups work. The only non-model
+  fallback is the clearly-labelled offline/local mode.
+- **A real agent:** Understand → Plan → Select tools → Execute → Inspect
+  → Recover (RETRY/SKIP/REPLAN/ABORT) → Verify → Report. Research is
+  multi-query and source-grounded. A website request produces real files,
+  validation, a working preview and ZIP export — or is reported
+  incomplete. Sensitive actions need confirmation; unsupported phone
+  actions are reported unsupported, never marked done.
+- **Multiple views:** cinematic home, task console, research + sources,
+  projects, preview, settings (providers, voice, memory, privacy,
+  effects), provider health on the home screen.
 
-## Architecture
+## Providers and free limits (honest)
 
-| Area | File | What it really does |
-|---|---|---|
-| Hologram | `src/rocky/hologram.ts` | Three.js `ShaderMaterial` particle humanoid, ~9000 pts desktop / ~4500 mobile, turbulence, energy rings, ground ring, state-driven colour/motion, FPS-adaptive density drop, Low Quality toggle |
-| Audio | `src/rocky/audio.ts` | `getUserMedia` + `AnalyserNode` real RMS; `SpeechRecognition`/`webkitSpeechRecognition` (ar-DZ, ar-SA fallback, fr-FR, en-US, auto); `speechSynthesis` with male-voice pick + pitch 0.7–0.85 for a deep voice; Mute/Stop actually cancel speech and mic |
-| Brain | `src/rocky/brain.ts` | Offline local brain (greeting, help, time/date, task planning, name memory) + optional OpenAI-compatible endpoint with streaming + `AbortController` cancellation |
-| Tasks | `src/rocky/tasks.ts` | In-app file store (create/edit/list/delete), task history with resume of interrupted tasks, confirmation modal required before delete/send/publish |
-| UI | `src/App.tsx` | Full-screen stage, status pill (IDLE/LISTENING/THINKING/SPEAKING/EXECUTING/ERROR), transcript, waveform, mic/stop/mute, Settings drawer, Tasks drawer |
+- Pollinations (keyless, default): public endpoint, rate-limited, NOT
+  private. Do not send sensitive data. No unlimited-free claim.
+- OpenRouter / Gemini / Groq / Mistral / Cloudflare / SambaNova: free
+  tiers with documented limits, each requiring the user's own key
+  (encrypted storage; keys never in source, logs or the APK).
+- Key validation lists models before any chat call; failover tries at
+  most 3 providers; rate-limited providers are not retried for 60 s.
+- Algeria access from the build environment is NOT verified — confirm
+  on the phone.
 
-## Honest limits — read before judging
+## What is NOT claimed
 
-- **Speaking visuals are NOT raw TTS audio.** Web Speech TTS exposes no audio
-  stream, so SPEAKING waves use a timing envelope from the utterance. LISTENING
-  waves use the REAL microphone analyser. This distinction is deliberate and
-  is never claimed otherwise.
-- **Local replies are NOT a cloud model.** The UI labels the mode at all times:
-  OFFLINE (local brain) vs CONNECTED (your endpoint). Offline replies are
-  scripted rules and say so.
-- **Speech recognition languages are NOT verified.** ar-DZ, fr-FR and en-US
-  are offered as language options but have NOT been tested on a real phone
-  (no emulator or physical device is available in this build environment).
-  Do NOT claim Algerian Arabic recognition works until tested on-device.
-- **No unrestricted phone access.** Files live in the app's own store;
-  Android sandbox rules apply. Destructive actions need explicit confirmation.
-- **API keys are never bundled.** A key entered in Settings is stored only via
-  Capacitor Preferences on the device. It is never committed, never logged,
-  and the CI build scans the bundle for key patterns.
+- Audible voice quality, microphone recognition, face rendering on a
+  physical phone, and the full spoken restaurant flow are
+  **phone-required** until the user confirms them. Emulator screenshots
+  are best-effort (CI emulator boots without KVM and has timed out
+  before). Nothing here is "verified" merely because its code exists.
+- No npm/native-toolchain execution happens on-device. Larger projects
+  needing those toolchains are a stated limit, not a hidden one.
+- No backend service is shipped. JARVIS's hosted FastAPI/Postgres/Redis
+  service was evaluated and not shipped (no funded backend authorised).
 
-## Install on Android
+## Licences and attribution
 
-1. Download `ROCKY_AI.apk` from the GitHub Actions artifact (or the release file).
-2. On the phone, allow "Install unknown apps" for the browser/files app if asked.
-3. Open the APK and install. App name: **ROCKY AI**.
-4. On first launch, allow the microphone permission when asked. If denied:
-   Android Settings → Apps → ROCKY AI → Permissions → Microphone → Allow.
-
-## Rebuild from GitHub (reproducible)
-
-```bash
-git clone https://github.com/aruzle102/rocky-ai-assistant.git
-cd rocky-ai-assistant
-npm ci
-npm test          # vitest: brain state machine + task store
-npm run build     # tsc --noEmit + vite build
-npx cap sync android
-cd android && ./gradlew assembleDebug
-# APK: android/app/build/outputs/apk/debug/app-debug.apk
-```
-
-Or simply push to `main`: the `Android APK` workflow builds, verifies the
-APK (exists, non-empty, valid zip, `aapt dump badging`), scans for secrets,
-and uploads it as artifact `ROCKY_AI-debug-apk`.
-
-## Configuration
-
-- `capacitor.config.ts`: appId `com.modaliadz.rocky`, appName `ROCKY AI`,
-  splash background `#050914`.
-- `android/app/build.gradle` (generated by `cap sync`, then edited in CI
-  preparation): minSdk 26, targetSdk 34, portrait-first via manifest.
-- In-app Settings: language, voice rate/pitch/volume, particle quality,
-  AI endpoint/model/key (on-device only).
-
-## What still needs a model, service, or permission
-
-- A cloud model: user-supplied OpenAI-compatible base URL + model + key
-  (Settings). Without it, the app is offline-only — by design.
-- Microphone permission on the device (runtime prompt + recovery message).
-- Speech services on the device for recognition/TTS quality (vendor-dependent).
-- A physical phone test for: launch, hologram rendering, mic flow,
-  recognition in ar-DZ/fr/en, TTS voice quality, install + icon.
-
-## v2 — what changed vs v1 (2026-10-24)
-
-v1 was a particle cloud with no face, no intro, no sound effects, canned
-offline replies, and a plan flow that marked plans done instantly. v2 fixes
-those exact defects in the same repo and pipeline:
-
-- **Real 3D face** (`src/rocky/face.ts` + upgraded `hologram.ts`): a
-  procedural head (translucent shell + wireframe skull, original geometry,
-  no stock model, no image) with glowing eyes, gaze that follows pointer/
-  touch plus idle saccades, blinking, brow tilt per state, head yaw/pitch
-  idle motion, and a jaw/mouth that opens with speech amplitude. Particle
-  skin kept, but mobile density dropped 4500 → 3200 pts (desktop 9000 →
-  7000), pixel-ratio cap 2.0 / 1.75 mobile, and sustained low FPS now
-  actually reduces density + pixel ratio (v1 only notified).
-- **Cinematic intro** (skippable, ~3.6s, first launch + replay in
-  Settings): black → generated WebAudio hum → blue particles converge
-  from a scattered cloud into the face (GPU `uForm` morph, spring easing
-  with tiny overshoot only, camera push-in) → eyes open ("wake") → fade
-  into the assistant. Intro is a real app state, not a splash image. The
-  launcher icon and native splash were inspected and kept: the 1024px icon
-  already reads as a particle head with glowing eyes at small size.
-- **Sound design** (`src/rocky/sfx.ts`, WebAudio-generated, no audio
-  files): intro hum, UI tap, listening chime, success/error tones, with an
-  SFX on/off toggle and volume in Settings. Mute stops speech and SFX.
-- **Voice** (`audio.ts`): real device voice list (async `voiceschanged`
-  load), user voice selection, "Test voice" button, rate/pitch/volume.
-  Speaking mouth motion is a syllable-timing envelope, NOT raw TTS audio:
-  Web Speech TTS and native TTS plugins expose no raw audio stream, so a
-  true audio-driven viseme is unavailable from this stack — the code and
-  UI say so instead of claiming lip-sync.
-- **AI providers** (`brain.ts`): three labelled modes — Local (useful
-  local tools: time/date, safe calculator, unit conversion, city times,
-  editable memory, plans, files; never presented as a model), Free public
-  (Pollinations, no key, GET only — see test results below, off by
-  default, privacy warning, never for sensitive input), and Connected
-  (user OpenAI-compatible endpoint/key, on-device only).
-- **Settings** (proper drawer): reply language en/fr/ar (core Rocky
-  replies + settings labels translated — partial i18n, stated as such),
-  voice list + test, rate/pitch/volume, SFX toggle + volume, particle
-  quality, profile name + editable notes, provider choice with privacy
-  notes, privacy controls (clear conversation, clear memory, export
-  history as text / copy / download), intro replay.
-- **Tasks fixed**: a plan creates a PENDING task with per-step status;
-  "Run plan" executes steps — the file step actually creates a real file
-  in the app store, other steps are honestly labelled "planning only, no
-  system action". Destructive actions still need confirmation. SMS,
-  calls, purchases, phone photos/contacts are reported UNSUPPORTED and
-  never marked done. Android sandbox limits stay explicit.
-- **Back button fixed**: the Capacitor back listener now reads a ref
-  mirroring the drawer state (v1 closed over the initial `drawer=null`
-  and could exit with a drawer open).
-- **WebGL fallback**: if the renderer cannot be created, the app shows a
-  clear message and chat/files/settings still work.
-
-## Research sources actually used (v2)
-
-- https://www.promptsmotion.com/ — motion grammar actually read: five
-  pillars (role, technical context, duration/framerate, second-by-second
-  breakdown, palette + easing), spring/Bezier easing, ban on generic
-  glows/particles/bouncy easing, one continuous morph without hard cuts.
-  Applied restrained: one purposeful convergence morph, tiny spring
-  overshoot only, no decorative glitter, no dead time. Note the tension:
-  Prompt Motion bans generic particle effects, while ROCKY explicitly
-  requires particles — v2 uses particles only as the single forming
-  figure, not as decoration.
-- https://21st.dev/ — homepage only (component library, shadcn-style
-  React/TypeScript components, bottom-sheet and chat-interface patterns).
-  No 21st component code was copied into this repo; the settings drawer
-  and chat layout adapt the general interaction ideas (segmented
-  provider choice, bottom-sheet settings, mode badges) with original code.
-- https://threejs.org/docs/ — core docs index (geometries including
-  Lathe/Sphere, materials, lights, WebGLRenderer, Fog). The face uses
-  standard Sphere/Box/Cone geometry + MeshBasicMaterial + Points with a
-  custom ShaderMaterial, all from the public docs.
-
-## Free-AI routes tested (2026-10-24, from the build VM, no keys)
-
-- **Pollinations GET** `https://text.pollinations.ai/<prompt>`:
-  VERIFIED WORKING — "17 plus 25, number only" → `42`, HTTP 200, ~5.4s;
-  capital of Algeria → `Algiers is the capital of Algeria`, HTTP 200.
-  Wired into the app (GET only, history truncated to ~1500 chars).
-- **Pollinations POST** (JSON, model openai): UNRELIABLE — first attempt
-  timed out after 30s with 0 bytes; a second attempt eventually returned
-  `7` for 3+4 (HTTP 200) but far too slowly to use. NOT wired.
-- **OpenRouter models list** (no key): HTTP 200 for the public list only;
-  chat requires a key — NOT wired, NOT claimed as free.
-- **Groq / Google AI Studio free tiers**: require a free key obtained by
-  the user — no key exists in this project, so NOT tested and NOT wired.
-  Documented in Settings as user-key options only.
-
-## Honest limits — v2 (read before judging)
-
-- Speaking mouth motion is envelope-driven, not raw-audio lip-sync
-  (see Voice above). Listening visuals use the REAL mic analyser.
-- Free public mode is not private and not guaranteed: rate-limited,
-  may change or disappear, and prompts travel in a URL.
-- Partial i18n: core replies + settings labels in en/fr/ar; free/
-  connected model text follows the reply language via prompt, but the
-  whole app is not fully translated.
-- **NOT device-tested** (no emulator or phone here): launch, face
-  rendering, intro timing, mic flow, recognition ar-DZ/fr/en, TTS voice
-  quality, icon on a home screen, back button on a real phone. Code and
-  CI tests pass; device behaviour must be confirmed on the user's phone.
-
-## v3 — real free multi-model engine (2026-10-24)
-
-Same repo, same pipeline, face/intro kept. New module `src/rocky/providers.ts`:
-
-- **Provider registry with a strict status vocabulary** shown in the UI:
-  DISCOVERED / DOCUMENTED / TESTED / INTEGRATED. A provider is never shown
-  as WORKING without a successful real test — the in-app Test button
-  actually calls the provider and shows latency + output or the error.
-- **Modes:** Smart Auto (fastest healthy provider for short questions,
-  reasoning-capable provider for long/complex ones), Fast, Deep Reasoning,
-  Offline (local tools only). Compare mode asks up to 2 providers, shows
-  each answer separately, then a synthesis assembled locally from those
-  answers (not a third model call).
-- **Failover:** at most 3 attempts per request (primary + 2 fallbacks),
-  no infinite retries, no duplicate calls. Health is persisted on-device
-  (last test, latency, successes, errors, last error); 3 consecutive
-  failures auto-disable a provider with a visible banner. Timeouts: 30 s.
-  Empty/invalid replies count as failures and fail over — never shown
-  as a successful empty answer.
-- **Settings are functional:** Discover providers + models (live models
-  endpoint where the API allows it), Connect/Disconnect, Test connection +
-  test prompt, preferred model or Smart Auto, fallback order (up/down),
-  enable/disable, keys stored only in Capacitor Preferences (masked in
-  the UI, never in source/bundle/GitHub), setup instructions per provider.
-- **Privacy:** "Include my name/notes in cloud model requests" defaults
-  OFF for cloud providers (ON for on-device local tools only). Keyless
-  public endpoints carry a NOT PRIVATE warning.
-- **Task execution, Plan → Execute → Verify → Report:** file steps
-  create the file and verify it by read-back; research steps actually
-  call DuckDuckGo Instant Answer (Wikipedia action API fallback) and
-  verify a summary + source came back; note/reminder steps store
-  in-app (reminders are in-app only — NOT system alarms, no
-  notifications plugin in v3); generic planning steps are labelled
-  "planning only, no system action". http(s) links can be opened;
-  calls/SMS/WhatsApp/email/purchases/phone photos/contacts are
-  UNSUPPORTED and never marked done. Sensitive actions still need
-  confirmation.
-- **Voice flow kept and checked:** mic → recognition → engine (or
-  honest local fallback) → spoken response; sending text or tapping
-  Stop/mic interrupts current speech. Face, intro, SFX from v2 are
-  unchanged.
-
-### Provider research table (2026-10-24, sources + status)
-
-| Provider | Access | Status in v3 | Free limits (as documented, not measured) | Signup |
-|---|---|---|---|---|
-| Pollinations | Keyless | INTEGRATED | No key, anonymous tier, rate-limited, numbers not published; may change/disappear | None |
-| OpenRouter (:free) | Your free key | DOCUMENTED (discovery TESTED) | ~20 req/min, ~50 req/day (1000/day after a $10 credit purchase — paid, optional) | openrouter.ai/keys |
-| Google Gemini (AI Studio) | Your free key | DOCUMENTED | Free tier on Flash/Flash-Lite, limits in AI Studio, vary by model/account; free-tier content may train Google products | aistudio.google.com |
-| Groq | Your free key | DOCUMENTED | Rate-limited; per-model limits in console / x-ratelimit-* headers | console.groq.com/keys |
-| Mistral | Your free key | DOCUMENTED | Experiment tier, limits in admin console, exact numbers unpublished; SMS verification required | console.mistral.ai |
-| Cloudflare Workers AI | Your free key + Account ID | DOCUMENTED | ~10,000 Neurons/day, resets 00:00 UTC, hard stop | dash.cloudflare.com |
-| SambaNova Cloud | Your free key | DOCUMENTED | Rate-limited; secondary sources quote ~20 req/min, ~20 req/day/model | cloud.sambanova.ai |
-| Local tools | On-device | INTEGRATED | No quota, no model | None |
-| LLM7.io | — | NOT INTEGRATED | Discovery returned 67 models, but chat test failed: 401 "Missing API key" for a listed model, 400 "model unavailable" for a guessed id. Not keyless in practice. Usable only if the user adds it as a custom OpenAI-compatible endpoint with their own key. | — |
-| GitHub Models | — | NOT INTEGRATED | Retired 2026-07-30 per GitHub docs (reported in secondary sources). Do not use. | — |
-
-Directories inspected (READMEs fetched 2026-10-24): pacocartones/free-llm-api-hub
-(maintained, dated, sourced dataset; 45 text providers), surendranb/free-inference
-(2026-10-24, 36 providers, 108 free models — source of several rows above),
-golapkamal/awesome-free-llm-apis (490+ free LLM APIs from 31 providers,
-daily-refreshed via freellm.net). No code from any of these repos was
-executed or installed; only their documentation was read. Conflicts found:
-model ids differ between directories (Gemini 2.5 vs 3.x generations;
-Groq model lists rotate) — that is why ROCKY discovers models live and
-lets the user edit the model id instead of trusting a static list.
-
-### Real test evidence (2026-10-24, build VM, no keys, no personal data)
-
-- Pollinations GET `text.pollinations.ai/<prompt>`: "17+25, number only"
-  → `42`, HTTP 200, 1.2 s; re-test "9+10" → `19`, HTTP 200, 5.8 s.
-  Models endpoint: HTTP 200, exactly 1 model: `openai-fast`.
-- OpenRouter models `openrouter.ai/api/v1/models`: HTTP 200, 17 `:free`
-  model ids (recursive/flint-v1.0:free, google/gemma-4-31b-it:free,
-  google/gemma-4-26b-a4b-it:free, cohere/north-mini-code:free,
-  nvidia/nemotron-3-*:free, …). Chat NOT tested — needs a key.
-- LLM7 models: HTTP 200, 67 ids; chat: 401 missing API key (listed
-  model), 400 model unavailable (guessed id). NOT wired as keyless.
-- DuckDuckGo Instant Answer: HTTP 202 with a real Abstract for
-  "Algiers" (capital of Algeria). Wikipedia REST summary: 403 without a
-  UA; Wikipedia action API with a UA: HTTP 200 with a real extract.
-  Research tool uses DuckDuckGo first, Wikipedia action API second.
-- Pollinations POST: NOT re-tested in v3 (already unreliable in v2) —
-  not wired.
-- Groq / Gemini / Mistral / Cloudflare / SambaNova chat: NOT tested —
-  no key exists in this project. They stay DOCUMENTED until a keyed
-  in-app Test passes.
-
-### Local on-device LLMs — why none is shipped
-
-WebLLM/WebGPU in an Android WebView is not a practical default for this
-app: even a 1–2B model needs ~0.8–1.4 GB of weights (3B ≈ 2.5 GB, 7B ≈
-5 GB per secondary sources), a multi-GB first download, WebGPU support
-that is not guaranteed in every Android WebView, and shared mobile GPU
-memory typically capped at 1–3 GB. Shipping one would make the APK
-huge, slow, and unreliable on the user's phone. v3 therefore keeps the
-honest local-tools assistant and cloud free tiers instead of a fake
-"local model". Speech stays on device Web Speech services
-(vendor-dependent) — no free cloud STT/TTS key is bundled.
-
-### Screenshot attempt (v3) — FAILED, no screenshot delivered
-
-Attempted a real headless capture of the built web bundle with the
-Chromium binary at /opt/meta-chromium/chrome (Chromium 152):
-`--headless` / `--headless=new`, SwiftShader, 390×844, local static
-server on 127.0.0.1:8124, and a trivial test page. Result: the binary
-exits 0 but writes NO screenshot file, even for the trivial page, with
-no screenshot error in its log; with `--user-data-dir` it hangs until
-the 30 s timeout, still with no file. No screenshot, video, or mockup
-is delivered for v3. Device screenshots must come from the user's
-phone. This does not affect the APK build, which is verified below.
-
-### Honest limits — v3 (read before judging)
-
-- Algeria access to every cloud provider is NOT verified from Algeria
-  (all network tests ran from the build VM) — confirm on the phone.
-- Keyed providers are DOCUMENTED, not TESTED, until the user adds a
-  free key and taps Test in Settings. No unlimited free access is
-  claimed anywhere; every free tier has limits (see table).
-- Speaking mouth motion is still envelope-driven, not raw-audio
-  lip-sync (Web Speech TTS exposes no audio stream).
-- Reminders are in-app only, not system alarms/notifications.
-- NOT device-tested (no emulator/phone here): launch, face, intro,
-  mic flow, recognition ar-DZ/fr/en, TTS quality, icon, back button,
-  and every in-app provider Test/Discover call on a real phone.
+See NOTICE.md: sherpa-onnx (Apache-2.0), Piper voice model (dataset
+licence per its model card), JARVIS-OS-V.2 patterns (MIT, adapted in
+Kotlin, not copied verbatim), Filament (Apache-2.0, evaluated only).

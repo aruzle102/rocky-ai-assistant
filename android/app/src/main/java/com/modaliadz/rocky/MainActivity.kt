@@ -41,6 +41,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var store: MemoryStore
     private lateinit var tts: RockyTts
+    private lateinit var piper: PiperTts
+    private lateinit var healthText: TextView
+    private var currentSpeakText: String = ""
     private lateinit var speech: SpeechInput
     private lateinit var engine: ProviderEngine
     private val sfx = Sfx()
@@ -87,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         statusPill = findViewById(R.id.statusPill)
+        healthText = findViewById(R.id.healthText)
         noticeText = findViewById(R.id.noticeText)
         inputText = findViewById(R.id.inputText)
         amplitudeView = findViewById(R.id.amplitudeView)
@@ -109,10 +113,53 @@ class MainActivity : AppCompatActivity() {
         taskAdapter = TaskAdapter(mutableListOf())
         taskList.adapter = taskAdapter
 
+        piper = PiperTts(this)
+        piper.listener = object : PiperTts.Listener {
+            override fun onAmplitude(a: Float) {
+                // Real Piper audio amplitude drives jaw + glow (not a fake envelope).
+                renderer.amplitude = a
+                renderer.jawOpen = a
+                amplitudeView.amplitude = a
+            }
+            override fun onDurationMs(totalMs: Long) {
+                renderer.setVisemes(VisemeMapper.forText(currentSpeakText), totalMs)
+            }
+            override fun onDone() {
+                renderer.jawOpen = 0f
+                renderer.amplitude = 0f
+                amplitudeView.amplitude = 0f
+                val pending = pendingAgentResult
+                if (pending != null) {
+                    pendingAgentResult = null
+                    deliverAgentResult(pending)
+                } else if (pendingPreviewSlug != null) {
+                    val slug = pendingPreviewSlug
+                    pendingPreviewSlug = null
+                    setState(RockyState.IDLE)
+                    startActivity(Intent(this@MainActivity, PreviewActivity::class.java).putExtra("slug", slug))
+                } else {
+                    setState(RockyState.IDLE)
+                }
+            }
+            override fun onError(message: String) {
+                showNotice("ROCKY Voice failed ($message) — falling back to system voice next time.")
+                setState(RockyState.IDLE)
+            }
+        }
+        piper.initAsync { ok ->
+            if (!ok) showNotice("ROCKY Voice (Piper) unavailable: ${piper.lastError ?: "init failed"}. System voice will be used.")
+            refreshHealthText()
+        }
+
         tts = RockyTts(this)
         tts.listener = object : RockyTts.Listener {
             override fun onWord(start: Int, end: Int) {
                 renderer.jawOpen = JawMapper.jawForWord(end - start)
+                // Visemes for this word, timed by the word itself.
+                val word = try { currentSpeakText.substring(start, end) } catch (_: Exception) { "" }
+                if (word.isNotBlank()) {
+                    renderer.setVisemes(VisemeMapper.forWord(word), (word.length * 130L + 200L))
+                }
             }
             override fun onEnvelope(a: Float) {
                 renderer.amplitude = a
@@ -163,7 +210,7 @@ class MainActivity : AppCompatActivity() {
         muteButton.setOnClickListener {
             muted = !muted
             muteButton.text = if (muted) "Unmute" else "Mute"
-            if (muted) { tts.stop(); setState(RockyState.IDLE) }
+            if (muted) { tts.stop(); piper.stop(); setState(RockyState.IDLE) }
         }
         findViewById<Button>(R.id.sendButton).setOnClickListener { send(inputText.text.toString()) }
         findViewById<Button>(R.id.stopButton).setOnClickListener { stopAll() }
@@ -172,6 +219,12 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.projectsButton).setOnClickListener {
             startActivity(Intent(this, ProjectsActivity::class.java))
+        }
+        findViewById<Button>(R.id.consoleButton).setOnClickListener {
+            startActivity(Intent(this, ConsoleActivity::class.java))
+        }
+        findViewById<Button>(R.id.researchButton).setOnClickListener {
+            startActivity(Intent(this, ResearchActivity::class.java))
         }
         findViewById<Button>(R.id.tasksButton).setOnClickListener {
             val show = tasksPanel.visibility != View.VISIBLE
@@ -232,7 +285,7 @@ class MainActivity : AppCompatActivity() {
         introOverlay.visibility = View.VISIBLE
         renderer.form = 0f
         sfx.hum()
-        handler.postDelayed({ if (currentState == RockyState.INTRO) finishIntro() }, 4500)
+        handler.postDelayed({ if (currentState == RockyState.INTRO) finishIntro() }, 5500)
     }
 
     private fun finishIntro() {
@@ -251,10 +304,22 @@ class MainActivity : AppCompatActivity() {
             RockyState.IDLE -> getString(R.string.status_idle)
             RockyState.LISTENING -> getString(R.string.status_listening)
             RockyState.THINKING -> getString(R.string.status_thinking)
+            RockyState.RESEARCHING -> getString(R.string.status_researching)
             RockyState.SPEAKING -> getString(R.string.status_speaking)
             RockyState.EXECUTING -> getString(R.string.status_executing)
+            RockyState.SUCCESS -> getString(R.string.status_success)
             RockyState.ERROR -> getString(R.string.status_error)
         }
+    }
+
+    /** One-line provider health: keyless default + Piper voice status. */
+    private fun refreshHealthText() {
+        val poll = engine.healthOf("pollinations")
+        val voice = if (store.voiceEngine == "piper") {
+            if (piper.available) "Voice: ROCKY (Piper Alan)" else "Voice: system (Piper unavailable)"
+        } else "Voice: system"
+        val pollText = if (poll.successes > 0) "Pollinations ✓ ${poll.successes}" else "Pollinations keyless"
+        healthText.text = "$pollText · $voice"
     }
 
     private fun showNotice(msg: String) {
@@ -304,6 +369,7 @@ class MainActivity : AppCompatActivity() {
     private fun stopAll() {
         aiCancelled.set(true)
         tts.stop()
+        piper.stop()
         speech.stop()
         listening = false
         micButton.text = "🎤"
@@ -321,6 +387,7 @@ class MainActivity : AppCompatActivity() {
         if (text.isEmpty()) return
         // Interruption: stop any current speech before handling the new input.
         tts.stop()
+        piper.stop()
         speech.stop()
         listening = false
         micButton.text = "🎤"
@@ -415,6 +482,7 @@ class MainActivity : AppCompatActivity() {
                 if (aiCancelled.get()) return@Thread
                 runOnUiThread {
                     addMessage("rocky", reply, providerLabel)
+                    refreshHealthText()
                     speak(reply)
                 }
             } catch (e: Exception) {
@@ -435,9 +503,16 @@ class MainActivity : AppCompatActivity() {
             // Deep research: multi-query, source-grounded, cancellable.
             if (taskText.startsWith("deep research:", ignoreCase = true)) {
                 val q = taskText.substringAfter(":").trim()
+                runOnUiThread { setState(RockyState.RESEARCHING) }
                 val tools = ToolRegistry(java.io.File(filesDir, "projects"), store, store, RealResearchClient(), aiCancelled)
                 val res = tools.execute("deep_research", mapOf("query" to q, "depth" to "standard"))
                 runOnUiThread {
+                    if (res.status == ToolStatus.DONE) {
+                        store.lastResearchQuery = q
+                        val parts = res.output.split("Sources:")
+                        store.lastResearchSummary = parts[0].trim()
+                        store.lastResearchSources = if (parts.size > 1) parts[1].trim() else ""
+                    }
                     addMessage("rocky", res.output)
                     if (res.status == ToolStatus.DONE) {
                         speak(res.output.take(600))
@@ -545,8 +620,20 @@ class MainActivity : AppCompatActivity() {
             setState(RockyState.IDLE)
             return
         }
+        currentSpeakText = text
         setState(RockyState.SPEAKING)
-        tts.setVoice(store.voiceName, languageTag(), store.pitch, store.rate)
+        // ROCKY Voice first: Piper (offline, male, English) when the engine
+        // is set to piper, Piper initialised, and the reply is English.
+        // Arabic/French replies and Piper failures use system TTS with a
+        // male-voice preference (never an assumed female default).
+        if (store.voiceEngine == "piper" && piper.available && RockyIdentity.isEnglishDominant(text)) {
+            renderer.setVisemes(VisemeMapper.forText(text), (text.length * 70L + 800L))
+            if (piper.speak(text, store.rate)) return
+            showNotice("ROCKY Voice failed — using system voice for this reply.")
+        }
+        val effectiveVoice = store.voiceName
+            ?: try { VoicePick.pickMaleVoice(tts.voices.map { it.name }) } catch (_: Exception) { null }
+        tts.setVoice(effectiveVoice, languageTag(), store.pitch, store.rate)
         if (!tts.speak(text)) {
             showNotice(getString(R.string.tts_unavailable))
             setState(RockyState.IDLE)
@@ -582,7 +669,8 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 sfx.success()
-                setState(RockyState.IDLE)
+                setState(RockyState.SUCCESS)
+                handler.postDelayed({ if (currentState == RockyState.SUCCESS) setState(RockyState.IDLE) }, 2000)
             }
         }.start()
     }
@@ -602,6 +690,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         tts.shutdown()
+        piper.shutdown()
         speech.stop()
         super.onDestroy()
     }

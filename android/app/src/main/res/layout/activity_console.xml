@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rocky_bg"
+    android:padding="16dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Task Console"
+            android:textColor="@color/rocky_text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Conversation log, notes, reminders and provider status."
+            android:textColor="@color/rocky_dim"
+            android:textSize="13sp"
+            android:layout_marginTop="4dp" />
+        <TextView
+            android:id="@+id/consoleLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_text"
+            android:textSize="14sp"
+            android:layout_marginTop="16dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Providers"
+            android:textColor="@color/rocky_text"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginTop="20dp" />
+        <TextView
+            android:id="@+id/consoleProviders"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/rocky_text"
+            android:textSize="13sp"
+            android:layout_marginTop="8dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="20dp">
+            <Button
+                android:id="@+id/consoleClearButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Clear history" />
+            <Button
+                android:id="@+id/consoleCloseButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:text="Close" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

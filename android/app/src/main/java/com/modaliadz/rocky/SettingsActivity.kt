@@ -22,6 +22,7 @@ import java.util.Locale
 class SettingsActivity : AppCompatActivity() {
     private lateinit var store: MemoryStore
     private lateinit var engine: ProviderEngine
+    private var piperField: PiperTts? = null
     private var tts: TextToSpeech? = null
     private var voiceNames: List<String> = emptyList()
     private lateinit var providerAdapter: ProviderAdapter
@@ -47,6 +48,23 @@ class SettingsActivity : AppCompatActivity() {
         providerNote = findViewById(R.id.providerNote)
 
         val voiceSpinner = findViewById<Spinner>(R.id.voiceSpinner)
+        val engineSpinner = findViewById<Spinner>(R.id.engineSpinner)
+        val piperStatus = findViewById<TextView>(R.id.piperStatus)
+        val engineOptions = listOf(
+            "ROCKY Voice — Piper Alan (male, offline, English)" to "piper",
+            "System voice (male preferred)" to "system"
+        )
+        engineSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, engineOptions.map { it.first })
+        engineSpinner.setSelection(engineOptions.indexOfFirst { it.second == store.voiceEngine }.coerceAtLeast(0))
+        val piper = PiperTts(this)
+        piperField = piper
+        piper.initAsync { ok ->
+            piperStatus.text = if (ok) {
+                "ROCKY Voice ready: Piper Alan (male, offline). Measured median pitch 98.8 Hz on the test sentence — deep masculine range. English only; Arabic/French use system voice."
+            } else {
+                "ROCKY Voice unavailable: ${piper.lastError ?: "init failed"}. System voice will be used."
+            }
+        }
         val languageSpinner = findViewById<Spinner>(R.id.languageSpinner)
         val modeSpinner = findViewById<Spinner>(R.id.modeSpinner)
         val qualitySpinner = findViewById<Spinner>(R.id.qualitySpinner)
@@ -134,6 +152,16 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         findViewById<Button>(R.id.testVoiceButton).setOnClickListener {
+            if (engineOptions[engineSpinner.selectedItemPosition].second == "piper") {
+                if (piper.available) {
+                    if (!piper.speak("Hello. I am ROCKY, calm, direct, and ready.", 0.7f + rateBar.progress / 100f * 0.6f)) {
+                        Toast.makeText(this, "ROCKY Voice is not ready yet", Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    Toast.makeText(this, "ROCKY Voice is still initialising or unavailable: ${piper.lastError ?: ""}", Toast.LENGTH_LONG).show()
+                }
+                return@setOnClickListener
+            }
             val voice = if (voiceSpinner.selectedItem != null) voiceSpinner.selectedItem.toString() else null
             val pitch = 0.5f + pitchBar.progress / 100f * 0.7f
             val rate = 0.7f + rateBar.progress / 100f * 0.6f
@@ -198,6 +226,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.saveButton).setOnClickListener {
             val voice = if (voiceSpinner.selectedItem != null) voiceSpinner.selectedItem.toString() else null
             store.voiceName = voice
+            store.voiceEngine = engineOptions[engineSpinner.selectedItemPosition].second
             store.pitch = 0.5f + pitchBar.progress / 100f * 0.7f
             store.rate = 0.7f + rateBar.progress / 100f * 0.6f
             store.language = languages[languageSpinner.selectedItemPosition].second
@@ -250,6 +279,7 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         try { tts?.shutdown() } catch (_: Exception) { }
+        try { piperField?.shutdown() } catch (_: Exception) { }
         super.onDestroy()
     }
 

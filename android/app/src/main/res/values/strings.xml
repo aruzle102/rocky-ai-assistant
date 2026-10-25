@@ -13,7 +13,9 @@
     <string name="status_listening">LISTENING</string>
     <string name="status_thinking">THINKING</string>
     <string name="status_speaking">SPEAKING</string>
+    <string name="status_researching">RESEARCHING</string>
     <string name="status_executing">EXECUTING</string>
+    <string name="status_success">DONE</string>
     <string name="status_error">ERROR</string>
     <string name="status_intro">WAKING UP</string>
     <string name="settings_title">Settings</string>
